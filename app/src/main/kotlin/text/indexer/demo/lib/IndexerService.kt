@@ -8,5 +8,7 @@ interface IndexerService {
 
     fun getIndexedWordsCnt(): Int
 
+    fun getFilesSizeInIndexQueue(): Long
+
     fun search(word: String): Collection<String>
 }

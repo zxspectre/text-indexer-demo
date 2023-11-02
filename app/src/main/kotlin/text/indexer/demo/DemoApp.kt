@@ -4,13 +4,13 @@ import kotlinx.coroutines.delay
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.IndexerServiceFactory
+import text.indexer.demo.lib.impl.mbSizeString
 
 //class IndexerServiceDemoApp{}
 private val log: Logger = LoggerFactory.getLogger("DemoApp")
 
 suspend fun main() {
-    val maxHeapMb = Runtime.getRuntime().maxMemory() / (1024 * 1024)
-    log.info("Running with maxheap = $maxHeapMb MB")
+    log.info("Running with maxheap = ${Runtime.getRuntime().maxMemory().mbSizeString()}")
 
     //TODO change lambdas from: List<String> to Sequence<String>
     //TODO add word postprocessor? implement case-insensitive index/search
@@ -22,11 +22,13 @@ suspend fun main() {
 //    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(" ", ",", "\n") }
 //    val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
     val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
-//    indexerService.indexFile("app/src/main/resources/testfile.txt")
+//    indexerService.indexFile("app/src/main/resources/fileof_randomness.txt")
     indexerService.indexDirRecursive("app/src/main/resources")
     while (true){
         delay(5000)
         indexerService.search("is")
-        log.debug("Using ${(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())/ (1024 * 1024)}MB, indexed ${indexerService.getIndexedWordsCnt()} words.")
+        Runtime.getRuntime().gc()
+        log.debug("Using ${(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()).mbSizeString()}, " +
+                "indexed ${indexerService.getIndexedWordsCnt()} words, inprogress=${indexerService.getFilesSizeInIndexQueue().mbSizeString()}")
     }
 }
