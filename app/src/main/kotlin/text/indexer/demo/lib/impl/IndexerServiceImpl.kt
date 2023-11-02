@@ -3,32 +3,37 @@ package text.indexer.demo.lib.impl
 import com.google.common.collect.Multimaps
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.IndexerService
 import java.io.Closeable
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.Date
 import java.util.Scanner
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.Executors
 import kotlin.io.path.Path
 import kotlin.io.path.isDirectory
 import kotlin.io.path.pathString
 
 private const val MAX_WORD_LENGTH = 16384
+private val log: Logger = LoggerFactory.getLogger(IndexerServiceImpl::class.java)
 
 
-class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) -> List<String>)?)
-    : IndexerService, Closeable {
+class IndexerServiceImpl(
+    delimiter: String?,
+    private val tokenizer: ((String) -> List<String>)?,
+    private val indexerThreadPoolSize: Int = 2
+    ) : IndexerService, Closeable {
 
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val indexationCoroutineScope = CoroutineScope(getDispatcher())
     private var wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) {
         ConcurrentHashMap.newKeySet()
     }
@@ -40,17 +45,15 @@ class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) ->
 
 
     init {
-        val maxHeapMb = Runtime.getRuntime().maxMemory()/(1024*1024)
-        println("Running with maxheap = $maxHeapMb MB")
-        scope.launch {
-            while (scope.isActive) {
-//                println(Date().toString()+" check modified files")
+        indexationCoroutineScope.launch {
+            while (indexationCoroutineScope.isActive) {
+                log.trace("check modified files")
                 processFileModifiedEvent(watchService.fileModifiedChannel.receive())
             }
         }
-        scope.launch {
-            while (scope.isActive) {
-                println(Date().toString()+" check deleted files")
+        indexationCoroutineScope.launch {
+            while (indexationCoroutineScope.isActive) {
+                log.trace("check deleted files")
                 processFileDeletedEvent(watchService.fileDeletedChannel.receive())
             }
         }
@@ -58,12 +61,18 @@ class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) ->
         //TODO scope.launch {merge deletedIndexedFiles with externallyMarkedForDeletionFiles; update wordToFileMap with deletedIndexedFiles}
     }
 
+    private fun getDispatcher(): ExecutorCoroutineDispatcher {
+        return Executors.newFixedThreadPool(indexerThreadPoolSize).asCoroutineDispatcher()
+    }
+
     private suspend fun processFileModifiedEvent(file: Path) {
-        index(file)
+        indexationCoroutineScope.launch {
+            index(file)
+        }
     }
 
     private suspend fun processFileDeletedEvent(file: Path) {
-        println("Mark $file for deletion")
+        log.debug("Mark $file for deletion")
         deletedIndexedFiles.add(file)
     }
 
@@ -74,6 +83,10 @@ class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) ->
     override suspend fun unindex(path: String) {
         TODO("Not yet implemented")
         // if (is_file) externallyMarkedForDeletionFiles.add(it) else ???
+    }
+
+    override fun getIndexedWordsCnt(): Int {
+        return wordToFileMap.size()
     }
 
     override suspend fun indexDirRecursive(path: String) {
@@ -88,8 +101,11 @@ class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) ->
 //        }
     }
 
-
     override suspend fun indexFile(filePath: String) {
+        //TODO implement as add to queue
+    }
+
+    private suspend fun _indexFile(filePath: String) {
         val filePath = Path(filePath)
         watchService.register(filePath)
         //TODO check TS before indexing
@@ -100,44 +116,48 @@ class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) ->
 
     private suspend fun index(file: Path) {
         //TODO concurrent file modification while indexing?
-        println(Date().toString() + " Indexing Start ${file.pathString}")
+        log.debug("Indexing Start ${file.pathString}")
         if (file.isDirectory()) {
             throw IllegalArgumentException("Should specify file, but was directory: $file")
         }
-        if (tokenizer == null && customDelimiter == null) {
-//            println("Standard word extractor")
-        } else if (tokenizer == null && customDelimiter != null) {
-//            println("Custom delimiter extractor")
-        } else if (tokenizer != null && customDelimiter == null) {
-//            println("Tokenizer that iterates on lines")
-        } else if (tokenizer != null && customDelimiter != null) {
-//            println("Tokenizer that iterates on custom tokens")
-        }
 
-        if (customDelimiter != null) {
-            Scanner(file).use {
-                it.useDelimiter(customDelimiter)
-                while (it.hasNext()) {
-                    val delimitedText = it.next()
-                    if (tokenizer != null) {
-                        applyTokenizerAndProcessWords(tokenizer, delimitedText, file)
-                    } else {
-                        processWord(delimitedText, file)
+//        if (tokenizer == null && customDelimiter == null) {
+//            println("Standard word extractor")
+//        } else if (tokenizer == null && customDelimiter != null) {
+//            println("Custom delimiter extractor")
+//        } else if (tokenizer != null && customDelimiter == null) {
+//            println("Tokenizer that iterates on lines")
+//        } else if (tokenizer != null && customDelimiter != null) {
+//            println("Tokenizer that iterates on custom tokens")
+//        }
+
+        withContext(Dispatchers.IO) {
+
+            if (customDelimiter != null) {
+                Scanner(file).use {
+                    it.useDelimiter(customDelimiter)
+                    while (it.hasNext()) {
+                        val delimitedText = it.next()
+                        if (tokenizer != null) {
+                            applyTokenizerAndProcessWords(tokenizer, delimitedText, file)
+                        } else {
+                            processWord(delimitedText, file)
+                        }
+                    }
+                }
+            } else {
+                Files.newBufferedReader(file).use {
+                    while (it.ready()) {
+                        applyTokenizerAndProcessWords(
+                            tokenizer ?: { s: String -> defaultTokenizer(s) },
+                            it.readLine(),
+                            file
+                        )
                     }
                 }
             }
-        } else {
-            Files.newBufferedReader(file).use {
-                while (it.ready()) {
-                    applyTokenizerAndProcessWords(
-                        tokenizer ?: { s: String -> defaultTokenizer(s) },
-                        it.readLine(),
-                        file
-                    )
-                }
-            }
         }
-//        println("Indexing Done ${file.pathString}")
+        log.debug("Indexing Done ${file.pathString}")
     }
 
     private fun defaultTokenizer(line: String): List<String> {
@@ -150,27 +170,29 @@ class IndexerServiceImpl(delimiter: String?, private val tokenizer: ((String) ->
 
     private fun processWord(word: String, filePath: Path) {
         if (word.isNotEmpty()) {
-            if(word.length>MAX_WORD_LENGTH){
-                println("Ignoring word <${word.substring(0, 10)}...> with length ${word.length} in file $filePath, " +
-                        "current limit is $MAX_WORD_LENGTH")
-            }else {
+            if (word.length > MAX_WORD_LENGTH) {
+                log.info(
+                    "Ignoring word <${word.substring(0, 10)}...> with length ${word.length} in file $filePath, " +
+                            "current limit is $MAX_WORD_LENGTH"
+                )
+            } else {
                 wordToFileMap.put(word, filePath)
             }
         }
     }
 
     override fun search(word: String): Collection<String> {
-//        println("Searching for '$word'")
+        log.debug("Searching for '$word'")
         val result = wordToFileMap[word]
         val res = result
             .filter { !deletedIndexedFiles.contains(it) }
             .map { it.pathString }
-        println("Found '$word' in $res")
+        log.info("Found '$word' in $res")
         return res
     }
 
     override fun close() {
         watchService.close()
-        scope.cancel()
+        indexationCoroutineScope.cancel()
     }
 }

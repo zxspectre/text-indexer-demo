@@ -6,5 +6,7 @@ interface IndexerService {
     suspend fun index(path: String)
     suspend fun unindex(path: String)
 
+    fun getIndexedWordsCnt(): Int
+
     fun search(word: String): Collection<String>
 }
