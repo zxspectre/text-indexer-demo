@@ -19,16 +19,23 @@ repositories {
 }
 
 dependencies {
+    implementation 'com.google.guava:guava:32.1.1-jre'
+    def coroutines_version = '1.6.4'
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-swing:$coroutines_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:$coroutines_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:$coroutines_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-debug:$coroutines_version"
+
     // Use the Kotlin JUnit 5 integration.
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines_version"
 
     // Use the JUnit 5 integration.
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.9.3'
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // This dependency is used by the application.
-    implementation 'com.google.guava:guava:32.1.1-jre'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
