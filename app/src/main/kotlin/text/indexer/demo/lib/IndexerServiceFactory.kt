@@ -1,6 +1,6 @@
 package text.indexer.demo.lib
 
-import text.indexer.demo.lib.impl.IndexerServiceImpl
+import text.indexer.demo.lib.impl.IndexerService
 
 class IndexerServiceFactory {
     companion object {
@@ -9,7 +9,7 @@ class IndexerServiceFactory {
          * or punctuation marks.
          */
         fun wordExtractingIndexerService(): IndexerService {
-            return IndexerServiceImpl(null, null)
+            return IndexerService(null, null)
         }
 
 
@@ -22,7 +22,7 @@ class IndexerServiceFactory {
         fun delimiterBasedIndexerService(
             delimiterPattern: String
         ): IndexerService {
-            return IndexerServiceImpl(delimiterPattern, null)
+            return IndexerService(delimiterPattern, null)
         }
 
 
@@ -34,7 +34,7 @@ class IndexerServiceFactory {
             tokenizer: (String) -> List<String>
         ): IndexerService {
             //TODO change List<String> to Sequence<String>
-            return IndexerServiceImpl(null, tokenizer)
+            return IndexerService(null, tokenizer)
         }
 
 
@@ -47,7 +47,7 @@ class IndexerServiceFactory {
             delimiterPattern: String,
             tokenizer: (String) -> List<String>
         ): IndexerService {
-            return IndexerServiceImpl(delimiterPattern, tokenizer)
+            return IndexerService(delimiterPattern, tokenizer)
         }
 
 

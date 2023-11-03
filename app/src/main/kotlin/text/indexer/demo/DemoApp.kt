@@ -4,7 +4,7 @@ import kotlinx.coroutines.delay
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.IndexerServiceFactory
-import text.indexer.demo.lib.impl.mbSizeString
+import text.indexer.demo.lib.impl.util.mbSizeString
 
 //class IndexerServiceDemoApp{}
 private val log: Logger = LoggerFactory.getLogger("DemoApp")
@@ -22,8 +22,8 @@ suspend fun main() {
 //    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(" ", ",", "\n") }
 //    val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
     val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
-//    indexerService.indexFile("app/src/main/resources/fileof_randomness.txt")
-    indexerService.indexDirRecursive("app/src/main/resources")
+//    indexerService.index("app/src/main/resources/fileof_randomness.txt")
+    indexerService.index("app/src/main/resources")
     while (true){
         delay(5000)
         indexerService.search("is")

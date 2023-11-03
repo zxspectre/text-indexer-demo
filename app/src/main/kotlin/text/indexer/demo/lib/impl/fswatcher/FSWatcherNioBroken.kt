@@ -1,4 +1,4 @@
-package text.indexer.demo.lib.impl
+package text.indexer.demo.lib.impl.fswatcher
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -67,7 +67,8 @@ class FSWatcherNioBroken {
             eventsToWatch = arrayOf(
                 StandardWatchEventKinds.ENTRY_MODIFY,
                 StandardWatchEventKinds.ENTRY_CREATE,
-                StandardWatchEventKinds.ENTRY_DELETE)
+                StandardWatchEventKinds.ENTRY_DELETE
+            )
         }
         path.register(
             watchService,

@@ -1,4 +1,4 @@
-package text.indexer.demo.lib.impl
+package text.indexer.demo.lib.impl.fswatcher
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,10 +18,10 @@ import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 
-private val log: Logger = LoggerFactory.getLogger(FSPollingWatcher::class.java)
-
 
 class FSPollingWatcher : Closeable {
+    private val log: Logger = LoggerFactory.getLogger(FSPollingWatcher::class.java)
+
     //TODO this should use coroutine with channel
     private val pollingIntervalMillis = 5000L
     private val watchedFiles = CopyOnWriteArraySet<Path>() //TODO check better collection impl
@@ -36,6 +36,26 @@ class FSPollingWatcher : Closeable {
     private val scope = CoroutineScope(Dispatchers.Default)
     val fileModifiedChannel = Channel<Path>(Channel.BUFFERED)
     val fileDeletedChannel = Channel<Path>(Channel.BUFFERED)
+
+
+    fun register(path: Path) {
+        require(path.exists()) { "Path does not exist" }
+        //TODO alternatively we could have separate methods for registerFile and registerDir that can not yet exist
+        if (path.isDirectory()) {
+            addDirToWatch(path)
+        } else {
+            addFileToWatch(path)
+        }
+    }
+
+    fun deregister(path: Path) {
+        if(watchedFiles.contains(path)){
+            watchedFiles.remove(path)
+        }
+        if(watchedDirs.contains(path)){
+            watchedDirs.remove(path)
+        }
+    }
 
 
     init {
@@ -120,15 +140,6 @@ class FSPollingWatcher : Closeable {
 
     private fun addFileToWatch(file: Path) {
         watchedFiles.add(file)
-    }
-
-
-    fun register(path: Path) {
-        if (path.isDirectory()) {
-            addDirToWatch(path)
-        } else {
-            addFileToWatch(path)
-        }
     }
 
     override fun close() {

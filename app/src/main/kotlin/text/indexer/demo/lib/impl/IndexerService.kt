@@ -1,6 +1,5 @@
 package text.indexer.demo.lib.impl
 
-import com.google.common.collect.Multimaps
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
@@ -11,13 +10,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import text.indexer.demo.lib.IndexerService
 import text.indexer.demo.lib.impl.exceptions.FileTooBigToIndexException
+import text.indexer.demo.lib.impl.fswatcher.FSPollingWatcher
+import text.indexer.demo.lib.impl.storage.MapBasedStorage
+import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
+import text.indexer.demo.lib.impl.util.mbSizeString
 import java.io.Closeable
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Scanner
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.Path
@@ -26,26 +27,20 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.pathString
 
 private const val MAX_WORD_LENGTH = 16384
-private val log: Logger = LoggerFactory.getLogger(IndexerServiceImpl::class.java)
+private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
-
-class IndexerServiceImpl(
-    delimiter: String?,
+class IndexerService(
+    private val customDelimiter: String?,
     private val tokenizer: ((String) -> List<String>)?,
     private val indexerThreadPoolSize: Int = 2,
     private val tryToPreventOom: Boolean = true
-) : IndexerService, Closeable {
-
+) : Closeable {
 
     private val indexationCoroutineScope = CoroutineScope(getDispatcher())
-    private var wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) {
-        ConcurrentHashMap.newKeySet() //TODO make a 2nd impl with Trie, improve search traverse?
-    }
-    private var deletedIndexedFiles = HashSet<Path>() // TODO replace w' some append specific concurrent set
-    private var externallyMarkedForDeletionFiles = HashSet<Path>()
 
-    private val customDelimiter: String? = delimiter
     private val watchService: FSPollingWatcher = FSPollingWatcher()
+    private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MapBasedStorage()
+
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
 
 
@@ -62,8 +57,6 @@ class IndexerServiceImpl(
                 processFileDeletedEvent(watchService.fileDeletedChannel.receive())
             }
         }
-
-        //TODO scope.launch {merge deletedIndexedFiles with externallyMarkedForDeletionFiles; update wordToFileMap with deletedIndexedFiles}
     }
 
     private fun getDispatcher(): ExecutorCoroutineDispatcher {
@@ -78,54 +71,33 @@ class IndexerServiceImpl(
 
     private suspend fun processFileDeletedEvent(file: Path) {
         log.debug("Mark $file for deletion")
-        deletedIndexedFiles.add(file)
+        reverseIndexStorage.remove(file)
     }
 
-    override suspend fun index(path: String) {
-        TODO("Not yet implemented")
+    suspend fun index(path: String) {
+        watchService.register(Path(path))
     }
 
-    override suspend fun unindex(path: String) {
-        TODO("Not yet implemented")
-        // if (is_file) externallyMarkedForDeletionFiles.add(it) else ???
+    suspend fun unindex(path: String) {
+        watchService.deregister(Path(path))
     }
 
-    override fun getIndexedWordsCnt(): Int {
-        return wordToFileMap.size()
+    fun getIndexedWordsCnt(): Int {
+        return reverseIndexStorage.size()
     }
 
-    override fun getFilesSizeInIndexQueue(): Long {
+    fun getFilesSizeInIndexQueue(): Long {
         return currentlyIndexingFileSize.get()
     }
 
-    override suspend fun indexDirRecursive(path: String) {
-        val dir = Path(path)
-        watchService.register(dir)
-
-        //TODO remove this indexing, use watchService's signals
-//        dir.walk().forEach {
-//            if (it.isFile) {
-//                index(it.toPath())
-//            }
-//        }
-    }
-
-    override suspend fun indexFile(filePath: String) {
-        watchService.register(Path(filePath))
-    }
-
-    private suspend fun _indexFile(filePath: String) {
-        val filePath = Path(filePath)
-        watchService.register(filePath)
-        //TODO check TS before indexing
-        //TODO concurrent modification of indexed file - ?
-//        index(filePath)
-        //TODO check and store TS after indexing
-    }
-
     private suspend fun index(file: Path) {
+        //TODO extract method implementation into separate DocumentProcessor classes
+        //TODO extract method implementation into separate DocumentProcessor classes
+        //TODO extract method implementation into separate DocumentProcessor classes
         require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
-        //TODO concurrent file modification while indexing?
+
+        //TODO ?check TS before indexing
+        //TODO ?concurrent modification of indexed file
         val fileSize = file.fileSize()
         if (tryToPreventOom) {
             tryPreventOom(file, fileSize)
@@ -168,6 +140,7 @@ class IndexerServiceImpl(
                     }
                 }
             }
+            //TODO ?check and store TS after indexing
             log.debug("Indexing Done ${file.pathString}")
         } finally {
             if (tryToPreventOom) {
@@ -213,16 +186,14 @@ class IndexerServiceImpl(
                             "current limit is $MAX_WORD_LENGTH"
                 )
             } else {
-                wordToFileMap.put(word, filePath)
+                reverseIndexStorage.put(word, filePath)
             }
         }
     }
 
-    override fun search(word: String): Collection<String> {
+    fun search(word: String): Collection<String> {
         log.debug("Searching for '$word'")
-        val result = wordToFileMap[word]
-        val res = result
-            .filter { !deletedIndexedFiles.contains(it) }
+        val res = reverseIndexStorage.get(word)
             .map { it.pathString }
         log.info("Found '$word' in $res")
         return res
