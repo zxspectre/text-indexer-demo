@@ -18,7 +18,7 @@ private val trieLock = ReentrantReadWriteLock()
  * DEBUG DemoApp - Using 1459MB, indexed 2148614 words - 68sec
  */
 @Deprecated("Remove method does not work")
-class SimpleTrieStorage : ReverseIndexStorage<String, Path> {
+class MapTrieStorage : ReverseIndexStorage<String, Path> {
     private val root = SimpleTrieNode()
 
     override fun put(keyword: String, document: Path) {

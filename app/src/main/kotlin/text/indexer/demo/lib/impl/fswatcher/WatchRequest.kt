@@ -7,5 +7,5 @@ enum class RequestType {
     NEW_FILE, NEW_DIR, DELETE
 }
 
-class IndexRequest(val type: RequestType, val path: Path) {
+class WatchRequest(val type: RequestType, val path: Path) {
 }

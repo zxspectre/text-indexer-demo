@@ -24,11 +24,14 @@ suspend fun main() {
     val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
 //    indexerService.index("app/src/main/resources/fileof_randomness.txt")
     indexerService.index("app/src/main/resources")
+//    repeat (3){
     while (true){
         delay(3000)
-        indexerService.search("is")
+        indexerService.search("Sherlock")
         Runtime.getRuntime().gc()
         log.debug("Using ${(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()).mbSizeString()}, " +
                 "indexed ${indexerService.getIndexedWordsCnt()} words, inprogress=${indexerService.getFilesSizeInIndexQueue().mbSizeString()}")
     }
+    indexerService.close()
+    println(" ------  DONE   -------- ")
 }

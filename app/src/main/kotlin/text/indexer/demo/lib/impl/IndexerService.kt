@@ -2,23 +2,23 @@ package text.indexer.demo.lib.impl
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExecutorCoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.impl.fswatcher.FSPollingWatcher
+import text.indexer.demo.lib.impl.parser.DocumentProcessor
 import text.indexer.demo.lib.impl.storage.MapBasedStorage
 import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
 import text.indexer.demo.lib.impl.util.mbSizeString
 import java.io.Closeable
-import java.nio.file.Files
 import java.nio.file.Path
-import java.util.Scanner
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.Path
 import kotlin.io.path.fileSize
@@ -28,57 +28,83 @@ import kotlin.io.path.pathString
 private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
 class IndexerService(
-    private val customDelimiter: String?,
-    private val tokenizer: ((String) -> List<String>)?,
-    private val indexerThreadPoolSize: Int = 2,
+    customDelimiter: String?,
+    tokenizer: ((String) -> List<String>)?,
+    indexerThreadPoolSize: Int = 2,
     private val tryToPreventOom: Boolean = true,
     private val maxWordLength: Int = 16384 //TODO limit buffer length to this, when searching for delimiters (4binaries)
 ) : Closeable {
 
-    private val indexationCoroutineScope = CoroutineScope(getDispatcher())
+    private val documentProcessor = DocumentProcessor(
+        tokenizer, customDelimiter
+    ) { word, doc -> processWordCallback(word, doc) }
+
+    private val customDispatcher = Executors.newFixedThreadPool(indexerThreadPoolSize).asCoroutineDispatcher()
+    private val indexFilesJob = Job()
+    private val indexFileCoroutineScope = CoroutineScope(customDispatcher + indexFilesJob)
+    private val handleChannelCoroutineScope = CoroutineScope(Dispatchers.Default)
 
     private val watchService: FSPollingWatcher = FSPollingWatcher()
     private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MapBasedStorage()
 
+    private val readWriteHeartbeat = 250L
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
+    private val removalInProgress: AtomicBoolean = AtomicBoolean(false)
+    private val memoryPrintFactor = 1.2
+    //^we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
+    // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
+    // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
 
 
     init {
-        indexationCoroutineScope.launch {
-            while (indexationCoroutineScope.isActive) {
-                log.trace("check modified files")
+        handleChannelCoroutineScope.launch {
+            while (handleChannelCoroutineScope.isActive) {
                 processFileModifiedEvent(watchService.fileModifiedChannel.receive())
             }
         }
-        indexationCoroutineScope.launch {
-            while (indexationCoroutineScope.isActive) {
-                log.trace("check deleted files")
+        handleChannelCoroutineScope.launch {
+            while (handleChannelCoroutineScope.isActive) {
+
                 processFileDeletedEvent(watchService.fileDeletedChannel.receive())
             }
         }
     }
 
-    private fun getDispatcher(): ExecutorCoroutineDispatcher {
-        return Executors.newFixedThreadPool(indexerThreadPoolSize).asCoroutineDispatcher()
-    }
-
     private suspend fun processFileModifiedEvent(file: Path) {
-        indexationCoroutineScope.launch {
+        while (removalInProgress.get()) {
+            //removal in progress, do not start new indexations
+            // TODO test that this flag doesn't go haywire
+            delay(readWriteHeartbeat)
+        }
+        indexFileCoroutineScope.launch {
             index(file)
         }
     }
 
     private suspend fun processFileDeletedEvent(file: Path) {
-        log.debug("Mark $file for deletion")
-        reverseIndexStorage.remove(file)
+        try {
+            removalInProgress.set(true)
+            while (indexFilesJob.children.filter { !it.isCompleted }.count() > 0) {
+                //ideally wait on indexFilesJob.join() for only current children to complete instead
+                delay(readWriteHeartbeat)
+            }
+            log.debug("Mark $file for deletion")
+            reverseIndexStorage.remove(file)
+            //we could cache several deletions and bulk-modify the inverted index,
+            // but that also introduces additional concurrency between this cache and new additions to index
+            // this may be easier to solve using some sort of optimistic locking (when we store timestamps in the index
+            // and only apply if the change
+        } finally {
+            removalInProgress.set(false)
+        }
     }
 
     suspend fun index(path: String) {
-        watchService.register(Path(path))
+        watchService.watch(Path(path))
     }
 
     suspend fun unindex(path: String) {
-        watchService.deregister(Path(path))
+        watchService.unwatch(Path(path))
     }
 
     fun getIndexedWordsCnt(): Int {
@@ -90,57 +116,16 @@ class IndexerService(
     }
 
     private suspend fun index(file: Path) {
-        //TODO extract method implementation into separate DocumentProcessor classes
-        //TODO extract method implementation into separate DocumentProcessor classes
-        //TODO extract method implementation into separate DocumentProcessor classes
         require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
-
-        //TODO ?check TS before indexing
-        //TODO ?concurrent modification of indexed file
+        //TODO ?concurrent modification of indexed file - perhaps check TS before indexing and after
         val fileSize = file.fileSize()
-        if (tryToPreventOom && oomPossible(fileSize)){
+        if (tryToPreventOom && oomPossible(fileSize)) {
             log.debug(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
             return
         }
         log.debug("Indexing Start ${file.pathString}")
-
-//        if (tokenizer == null && customDelimiter == null) {
-//            println("Standard word extractor")
-//        } else if (tokenizer == null && customDelimiter != null) {
-//            println("Custom delimiter extractor")
-//        } else if (tokenizer != null && customDelimiter == null) {
-//            println("Tokenizer that iterates on lines")
-//        } else if (tokenizer != null && customDelimiter != null) {
-//            println("Tokenizer that iterates on custom tokens")
-//        }
-
         try {
-            withContext(Dispatchers.IO) {
-                if (customDelimiter != null) {
-                    Scanner(file).use {
-                        it.useDelimiter(customDelimiter)
-                        while (it.hasNext()) {
-                            val delimitedText = it.next()
-                            if (tokenizer != null) {
-                                applyTokenizerAndProcessWords(tokenizer, delimitedText, file)
-                            } else {
-                                processWord(delimitedText, file)
-                            }
-                        }
-                    }
-                } else {
-                    Files.newBufferedReader(file).use {
-                        while (it.ready()) {
-                            applyTokenizerAndProcessWords(
-                                tokenizer ?: { s: String -> defaultTokenizer(s) },
-                                it.readLine(),
-                                file
-                            )
-                        }
-                    }
-                }
-            }
-            //TODO ?check and store TS after indexing
+            documentProcessor.extractWords(file)
             log.debug("Indexing Done ${file.pathString}")
         } finally {
             if (tryToPreventOom) {
@@ -150,9 +135,6 @@ class IndexerService(
     }
 
     private fun oomPossible(fileSize: Long): Boolean {
-        val memoryPrintFactor = 1.2 //we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
-        // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
-        // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
         val allIndexingFilesSize = currentlyIndexingFileSize.get()
         val freeMemory =
             Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory() + Runtime.getRuntime().freeMemory()
@@ -171,15 +153,7 @@ class IndexerService(
         return false
     }
 
-    private fun defaultTokenizer(line: String): List<String> {
-        return line.split("\\s+".toRegex()).map { it.replace("""^\p{Punct}+|\p{Punct}+$""".toRegex(), "") }
-    }
-
-    private fun applyTokenizerAndProcessWords(tokenizer: ((String) -> List<String>)?, word: String, filePath: Path) {
-        tokenizer!!.invoke(word).forEach { processWord(it, filePath) }
-    }
-
-    private fun processWord(word: String, filePath: Path) {
+    private fun processWordCallback(word: String, filePath: Path) {
         if (word.isNotEmpty()) {
             if (word.length > maxWordLength) {
                 log.info(
@@ -187,14 +161,14 @@ class IndexerService(
                             "current limit is $maxWordLength"
                 )
             } else {
-                reverseIndexStorage.put(word.lowercase(), filePath)
+                reverseIndexStorage.put(word, filePath)
             }
         }
     }
 
     fun search(word: String): Collection<String> {
         log.debug("Searching for '$word'")
-        val res = reverseIndexStorage.get(word.lowercase())
+        val res = reverseIndexStorage.get(word)
             .map { it.pathString }
         log.info("Found '$word' in $res")
         return res
@@ -202,6 +176,8 @@ class IndexerService(
 
     override fun close() {
         watchService.close()
-        indexationCoroutineScope.cancel()
+        customDispatcher.close()
+        indexFileCoroutineScope.cancel()
+        handleChannelCoroutineScope.cancel()
     }
 }

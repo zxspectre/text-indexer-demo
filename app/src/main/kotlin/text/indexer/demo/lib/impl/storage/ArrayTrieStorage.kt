@@ -17,8 +17,8 @@ private val trieLock = ReentrantReadWriteLock()
  * DEBUG DemoApp - Using 41MB, indexed 50086 words case insensitive
  */
 @Deprecated("Not fully implemented")
-class HalfTrieStorage : ReverseIndexStorage<String, Path> {
-    private val log: Logger = LoggerFactory.getLogger(HalfTrieStorage::class.java)
+class ArrayTrieStorage : ReverseIndexStorage<String, Path> {
+    private val log: Logger = LoggerFactory.getLogger(ArrayTrieStorage::class.java)
 
     private val root = ArrayTrieNode()
 
@@ -63,9 +63,9 @@ class HalfTrieStorage : ReverseIndexStorage<String, Path> {
     }
 
     private fun code(char: Char): Int{
-        when {
-            char.isLetter() -> return char - 'a'
-            char.isDigit() -> return char - '0' + 26
+        return when {
+            char.isLetter() -> char - 'a'
+            char.isDigit() -> char - '0' + 26
             else -> throw IllegalArgumentException("Invalid character: $char")
         }
     }
