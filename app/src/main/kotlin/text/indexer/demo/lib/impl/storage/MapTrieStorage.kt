@@ -9,13 +9,17 @@ private val trieLock = ReentrantReadWriteLock()
 
 
 /**
- * Char-ordinal array based trie for english words, Multimap for other words.
+ * Trie using Hashmaps and Hashsets
  * For 13Mb of text files:
+ * DEBUG DemoApp - Using 45MB, indexed 58169 words
+ * DEBUG DemoApp - Using 38MB, indexed 50086 words case insensitive
  *
- *  case insensitive
+ * For 968Mb of text files (wiki dump):
+ * DEBUG DemoApp - Using 1459MB, indexed 2148614 words - 68sec
  */
-class HalfTrieStorage : ReverseIndexStorage<String, Path> {
-    private val root = TrieNode()
+@Deprecated("Remove method does not work")
+class SimpleTrieStorage : ReverseIndexStorage<String, Path> {
+    private val root = SimpleTrieNode()
 
     override fun put(keyword: String, document: Path) {
         trieLock.writeLock().lock()
@@ -58,5 +62,29 @@ class HalfTrieStorage : ReverseIndexStorage<String, Path> {
 
     override fun size(): Int {
         return sizeCounter.get()
+    }
+}
+
+class SimpleTrieNode {
+    val children = hashMapOf<Char, SimpleTrieNode>()
+    val documents = hashSetOf<Path>()
+
+    fun addDocument(document: Path) {
+        if (documents.isEmpty()) {
+            sizeCounter.incrementAndGet()
+        }
+        documents.add(document)
+    }
+
+    fun getDocuments(): List<Path> {
+        return documents.toList()
+    }
+
+    fun addChild(c: Char): SimpleTrieNode {
+        return children.computeIfAbsent(c) { SimpleTrieNode() }
+    }
+
+    fun getChild(c: Char): SimpleTrieNode? {
+        return children[c]
     }
 }
