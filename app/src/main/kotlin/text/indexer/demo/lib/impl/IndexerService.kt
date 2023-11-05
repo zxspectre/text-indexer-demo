@@ -26,14 +26,14 @@ import kotlin.io.path.fileSize
 import kotlin.io.path.isDirectory
 import kotlin.io.path.pathString
 
-private const val MAX_WORD_LENGTH = 16384
 private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
 class IndexerService(
     private val customDelimiter: String?,
     private val tokenizer: ((String) -> List<String>)?,
     private val indexerThreadPoolSize: Int = 2,
-    private val tryToPreventOom: Boolean = true
+    private val tryToPreventOom: Boolean = true,
+    private val maxWordLength: Int = 16384 //TODO limit buffer length to this, when searching for delimiters (4binaries)
 ) : Closeable {
 
     private val indexationCoroutineScope = CoroutineScope(getDispatcher())
@@ -180,20 +180,20 @@ class IndexerService(
 
     private fun processWord(word: String, filePath: Path) {
         if (word.isNotEmpty()) {
-            if (word.length > MAX_WORD_LENGTH) {
+            if (word.length > maxWordLength) {
                 log.info(
                     "Ignoring word <${word.substring(0, 10)}...> with length ${word.length} in file $filePath, " +
-                            "current limit is $MAX_WORD_LENGTH"
+                            "current limit is $maxWordLength"
                 )
             } else {
-                reverseIndexStorage.put(word, filePath)
+                reverseIndexStorage.put(word.lowercase(), filePath)
             }
         }
     }
 
     fun search(word: String): Collection<String> {
         log.debug("Searching for '$word'")
-        val res = reverseIndexStorage.get(word)
+        val res = reverseIndexStorage.get(word.lowercase())
             .map { it.pathString }
         log.info("Found '$word' in $res")
         return res
