@@ -19,7 +19,6 @@ suspend fun main() {
     //TODO working with several instances of services
     //TODO working multithreaded with same service instance
     //TODO make service closeable, removing watches, freeing resources
-    //TODO FileTooBigToIndexException breaks indexation (partial index?)
 //    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(" ", ",", "\n") }
 //    val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
     val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")

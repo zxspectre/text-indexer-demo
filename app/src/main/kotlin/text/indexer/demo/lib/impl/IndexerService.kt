@@ -10,7 +10,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import text.indexer.demo.lib.impl.exceptions.FileTooBigToIndexException
 import text.indexer.demo.lib.impl.fswatcher.FSPollingWatcher
 import text.indexer.demo.lib.impl.storage.MapBasedStorage
 import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
@@ -99,8 +98,9 @@ class IndexerService(
         //TODO ?check TS before indexing
         //TODO ?concurrent modification of indexed file
         val fileSize = file.fileSize()
-        if (tryToPreventOom) {
-            tryPreventOom(file, fileSize)
+        if (tryToPreventOom && oomPossible(fileSize)){
+            log.debug(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+            return
         }
         log.debug("Indexing Start ${file.pathString}")
 
@@ -149,7 +149,7 @@ class IndexerService(
         }
     }
 
-    private fun tryPreventOom(file: Path, fileSize: Long) {
+    private fun oomPossible(fileSize: Long): Boolean {
         val memoryPrintFactor = 1.2 //we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
         // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
         // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
@@ -164,10 +164,11 @@ class IndexerService(
                             "its ${(allIndexingFilesSize + fileSize).mbSizeString()} " +
                             "versus ${freeMemory.mbSizeString()} free heap after GC"
                 )
-                throw FileTooBigToIndexException("Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                return true
             }
         }
         currentlyIndexingFileSize.getAndAdd(fileSize)
+        return false
     }
 
     private fun defaultTokenizer(line: String): List<String> {
