@@ -70,7 +70,7 @@ class ArrayTrieStorage : ReverseIndexStorage<String, Path> {
         }
     }
 
-    override fun remove(document: Path) {
+    override fun remove(documents: Set<Path>){
         //TODO("Not yet implemented")
         //sizeCounter ?
     }

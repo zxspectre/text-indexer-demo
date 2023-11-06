@@ -10,7 +10,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import text.indexer.demo.lib.impl.fswatcher.FSPollingWatcher
+import text.indexer.demo.lib.impl.fswatcher.EventType
+import text.indexer.demo.lib.impl.fswatcher.FsWatcher
 import text.indexer.demo.lib.impl.parser.DocumentProcessor
 import text.indexer.demo.lib.impl.storage.MapBasedStorage
 import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
@@ -44,7 +45,7 @@ class IndexerService(
     private val indexFileCoroutineScope = CoroutineScope(customDispatcher + indexFilesJob)
     private val handleChannelCoroutineScope = CoroutineScope(Dispatchers.Default)
 
-    private val watchService: FSPollingWatcher = FSPollingWatcher()
+    private val watchService: FsWatcher = FsWatcher()
     private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MapBasedStorage()
 
     private val readWriteHeartbeat = 250L
@@ -59,37 +60,37 @@ class IndexerService(
     init {
         handleChannelCoroutineScope.launch {
             while (handleChannelCoroutineScope.isActive) {
-                processFileModifiedEvent(watchService.fileModifiedChannel.receive())
-            }
-        }
-        handleChannelCoroutineScope.launch {
-            while (handleChannelCoroutineScope.isActive) {
-
-                processFileDeletedEvent(watchService.fileDeletedChannel.receive())
+                val event = watchService.fileEventChannel.receive()
+                when(event.type){
+                    EventType.NEW -> processNewFiles(event.files)
+                    EventType.DELETED -> processDeletedFiles(event.files)
+                }
             }
         }
     }
 
-    private suspend fun processFileModifiedEvent(file: Path) {
-        while (removalInProgress.get()) {
-            //removal in progress, do not start new indexations
-            // TODO test that this flag doesn't go haywire
-            delay(readWriteHeartbeat)
+
+
+    private fun processNewFiles(files: Collection<Path>) {
+        if(removalInProgress.get()){
+            throw RuntimeException("Shouldn't happen") //TODO remove removalInProgress after testing
         }
-        indexFileCoroutineScope.launch {
-            index(file)
+        files.forEach {
+            indexFileCoroutineScope.launch {
+                index(it)
+            }
         }
     }
 
-    private suspend fun processFileDeletedEvent(file: Path) {
+    private suspend fun processDeletedFiles(files: Set<Path>) {
         try {
             removalInProgress.set(true)
             while (indexFilesJob.children.filter { !it.isCompleted }.count() > 0) {
                 //ideally wait on indexFilesJob.join() for only current children to complete instead
                 delay(readWriteHeartbeat)
             }
-            log.debug("Mark $file for deletion")
-            reverseIndexStorage.remove(file)
+            log.debug("Mark $files for deletion")
+            reverseIndexStorage.remove(files)
             //we could cache several deletions and bulk-modify the inverted index,
             // but that also introduces additional concurrency between this cache and new additions to index
             // this may be easier to solve using some sort of optimistic locking (when we store timestamps in the index
@@ -98,6 +99,7 @@ class IndexerService(
             removalInProgress.set(false)
         }
     }
+
 
     suspend fun index(path: String) {
         watchService.watch(Path(path))
@@ -161,16 +163,16 @@ class IndexerService(
                             "current limit is $maxWordLength"
                 )
             } else {
-                reverseIndexStorage.put(word, filePath)
+                reverseIndexStorage.put(word.lowercase(), filePath) //TODO remove lowercase()
             }
         }
     }
 
     fun search(word: String): Collection<String> {
-        log.debug("Searching for '$word'")
-        val res = reverseIndexStorage.get(word)
+        log.trace("Searching for '$word'")
+        val res = reverseIndexStorage.get(word.lowercase())   //TODO remove lowercase()
             .map { it.pathString }
-        log.info("Found '$word' in $res")
+        log.debug("Found '$word' in $res")
         return res
     }
 

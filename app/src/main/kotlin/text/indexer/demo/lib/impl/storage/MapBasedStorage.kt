@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * DEBUG DemoApp - Using 19MB, indexed 50086 words case insensitive
  *
  * For 968Mb of text files (wiki dump):
- * DEBUG DemoApp - Using 611MB, indexed 2148614 words - 44sec
+ * DEBUG DemoApp - Using 610MB, indexed 2148614 words - 44sec
  */
 class MapBasedStorage:ReverseIndexStorage<String, Path> {
     private var wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) {
@@ -26,8 +26,15 @@ class MapBasedStorage:ReverseIndexStorage<String, Path> {
     }
 
     // Not thread safe
-    override fun remove(document: Path) {
-        wordToFileMap.entries() /TODO how to remove?
+    override fun remove(docsToRemove: Set<Path>){
+        wordToFileMap.keySet().forEach{
+            val curDocs = wordToFileMap[it]
+            curDocs.removeAll(docsToRemove)
+            if(curDocs.isEmpty()){
+                wordToFileMap.removeAll(it)
+            }
+
+        }
     }
 
     // Thread safe
