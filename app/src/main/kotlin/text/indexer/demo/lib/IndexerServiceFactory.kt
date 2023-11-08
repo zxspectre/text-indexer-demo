@@ -3,6 +3,7 @@ package text.indexer.demo.lib
 import text.indexer.demo.lib.impl.IndexerService
 
 class IndexerServiceFactory {
+    //TODO get rid of factory
     companion object {
         /**
          * Standard word extractor that will split the text by any whitespace characters
@@ -18,6 +19,8 @@ class IndexerServiceFactory {
          * based on specified delimiter Pattern (should be a valid java.util.regex.Pattern pattern).
          * Note that if you include only whitespace character, then punctuation marks will be part
          * of the extracted words.
+         * DEBUG DemoApp - Using 611MB, indexed 2148614 words, inprogress=0MB
+         * 966Mb -> 46 sec
          */
         fun delimiterBasedIndexerService(
             delimiterPattern: String
@@ -29,9 +32,10 @@ class IndexerServiceFactory {
         /**
          * Will extract words using a specified by lambda tokenizer that accepts text file line
          * as an input and outputs a list of words
+         * 966Mb -> 32 sec
          */
         fun lambdaTokenizerIndexerService(
-            tokenizer: (String) -> List<String>
+            tokenizer: (String) -> Sequence<String>
         ): IndexerService {
             //TODO change List<String> to Sequence<String>
             return IndexerService(null, tokenizer)
@@ -45,7 +49,7 @@ class IndexerServiceFactory {
          */
         fun lambdaTokenizerWithCustomLinesIndexerService(
             delimiterPattern: String,
-            tokenizer: (String) -> List<String>
+            tokenizer: (String) -> Sequence<String>
         ): IndexerService {
             return IndexerService(delimiterPattern, tokenizer)
         }

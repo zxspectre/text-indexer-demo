@@ -13,10 +13,11 @@ import java.util.Scanner
  * if (tokenizer != null && customDelimiter != null) -> "Tokenizer that iterates on custom tokens")
  */
 class DocumentProcessor(
-    private val tokenizer: ((String) -> List<String>)?,
+    private val tokenizer: ((String) -> Sequence<String>)?,
     private val customDelimiter: String?,
     private val wordCallback: (String, Path) -> Unit
 ) {
+    private val defaultRegex = Regex("[\\p{Punct}\\s]+")
 
     suspend fun extractWords(file: Path) {
         withContext(Dispatchers.IO) {
@@ -34,6 +35,7 @@ class DocumentProcessor(
                 }
             } else {
                 Files.newBufferedReader(file).use {
+
                     while (it.ready()) {
                         applyTokenizerAndProcessWords(
                             tokenizer ?: { s: String -> defaultTokenizer(s) },
@@ -46,12 +48,12 @@ class DocumentProcessor(
         }
     }
 
-    private fun applyTokenizerAndProcessWords(tokenizer: ((String) -> List<String>)?, word: String, filePath: Path) {
-        tokenizer!!.invoke(word).forEach { wordCallback.invoke(it, filePath) }
+    private fun applyTokenizerAndProcessWords(tokenizer: ((String) -> Sequence<String>), word: String, filePath: Path) {
+        tokenizer.invoke(word).forEach { wordCallback.invoke(it, filePath) }
     }
 
-    private fun defaultTokenizer(line: String): List<String> {
-        return line.split("\\s+".toRegex()).map { it.replace("""^\p{Punct}+|\p{Punct}+$""".toRegex(), "") }
+    private fun defaultTokenizer(line: String): Sequence<String> {
+        return line.split(defaultRegex).asSequence()
     }
 
 

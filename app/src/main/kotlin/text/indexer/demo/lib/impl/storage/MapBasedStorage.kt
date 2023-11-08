@@ -14,11 +14,9 @@ import java.util.concurrent.ConcurrentHashMap
  * DEBUG DemoApp - Using 610MB, indexed 2148614 words - 44sec
  */
 class MapBasedStorage:ReverseIndexStorage<String, Path> {
-    private var wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) {
+    private var wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) { //TODO replace this multimap: overhead and not thread safe
         ConcurrentHashMap.newKeySet()
     }
-    private var deletedIndexedFiles = HashSet<Path>()
-    //TODO scope.launch {periodically update wordToFileMap with deletedIndexedFiles}
 
     // Thread safe
     override fun size(): Int {
@@ -26,10 +24,10 @@ class MapBasedStorage:ReverseIndexStorage<String, Path> {
     }
 
     // Not thread safe
-    override fun remove(docsToRemove: Set<Path>){
+    override fun remove(documents: Set<Path>){
         wordToFileMap.keySet().forEach{
             val curDocs = wordToFileMap[it]
-            curDocs.removeAll(docsToRemove)
+            curDocs.removeAll(documents)
             if(curDocs.isEmpty()){
                 wordToFileMap.removeAll(it)
             }
@@ -40,7 +38,6 @@ class MapBasedStorage:ReverseIndexStorage<String, Path> {
     // Thread safe
     override fun get(keyword: String): Collection<Path> {
         return wordToFileMap[keyword]
-            .filter { !deletedIndexedFiles.contains(it) } // TODO this implementation doesn't shrink
     }
 
     // Thread safe

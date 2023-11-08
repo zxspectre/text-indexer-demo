@@ -30,7 +30,7 @@ private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
 class IndexerService(
     customDelimiter: String?,
-    tokenizer: ((String) -> List<String>)?,
+    tokenizer: ((String) -> Sequence<String>)?,
     indexerThreadPoolSize: Int = 2,
     private val tryToPreventOom: Boolean = true,
     private val maxWordLength: Int = 16384 //TODO limit buffer length to this, when searching for delimiters (4binaries)
@@ -125,10 +125,10 @@ class IndexerService(
             log.debug(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
             return
         }
-        log.debug("Indexing Start ${file.pathString}")
+        log.debug("Indexing Start ${file.pathString}  --->")
         try {
             documentProcessor.extractWords(file)
-            log.debug("Indexing Done ${file.pathString}")
+            log.debug("  ---> Indexing Done ${file.pathString}")
         } finally {
             if (tryToPreventOom) {
                 currentlyIndexingFileSize.addAndGet(-fileSize)

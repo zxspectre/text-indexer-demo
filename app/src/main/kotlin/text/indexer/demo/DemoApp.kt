@@ -19,9 +19,12 @@ suspend fun main() {
     //TODO working with several instances of services
     //TODO working multithreaded with same service instance
     //TODO make service closeable, removing watches, freeing resources
-//    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(" ", ",", "\n") }
+    delay(10000)
+    val regex = Regex("[\\p{Punct}\\s]+")
+    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(regex).asSequence()}
 //    val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
-    val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
+//    val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
+//    val indexerService = IndexerService(customDelimiter = "===", tokenizer = {s: String -> s.split(Regex("[\\p{Punct}\\s]+")).asSequence()})
 //    indexerService.index("app/src/main/resources/fileof_randomness.txt")
     indexerService.index("app/src/main/resources")
 //    repeat (3){
