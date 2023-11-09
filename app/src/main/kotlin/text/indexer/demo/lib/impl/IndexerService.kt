@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.impl.fswatcher.EventType
 import text.indexer.demo.lib.impl.fswatcher.FsWatcher
 import text.indexer.demo.lib.impl.parser.DocumentProcessor
-import text.indexer.demo.lib.impl.storage.MapBasedStorage
+import text.indexer.demo.lib.impl.storage.MultimapBasedStorage
 import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
 import text.indexer.demo.lib.impl.util.mbSizeString
 import java.io.Closeable
@@ -30,7 +30,7 @@ private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
 class IndexerService(
     customDelimiter: String?,
-    tokenizer: ((String) -> Sequence<String>)?,
+    tokenizer: ((String) -> Collection<String>)?,
     indexerThreadPoolSize: Int = 2,
     private val tryToPreventOom: Boolean = true,
     private val maxWordLength: Int = 16384 //TODO limit buffer length to this, when searching for delimiters (4binaries)
@@ -46,7 +46,7 @@ class IndexerService(
     private val handleChannelCoroutineScope = CoroutineScope(Dispatchers.Default)
 
     private val watchService: FsWatcher = FsWatcher()
-    private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MapBasedStorage()
+    private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MultimapBasedStorage()
 
     private val readWriteHeartbeat = 250L
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
@@ -73,7 +73,7 @@ class IndexerService(
 
     private fun processNewFiles(files: Collection<Path>) {
         if(removalInProgress.get()){
-            throw RuntimeException("Shouldn't happen") //TODO remove removalInProgress after testing
+            throw RuntimeException("Shouldn't happen, ProgrammerNotFoundException.") //TODO remove removalInProgress after testing
         }
         files.forEach {
             indexFileCoroutineScope.launch {

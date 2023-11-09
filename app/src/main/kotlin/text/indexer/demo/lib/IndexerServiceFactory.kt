@@ -35,7 +35,7 @@ class IndexerServiceFactory {
          * 966Mb -> 32 sec
          */
         fun lambdaTokenizerIndexerService(
-            tokenizer: (String) -> Sequence<String>
+            tokenizer: (String) -> Collection<String>
         ): IndexerService {
             //TODO change List<String> to Sequence<String>
             return IndexerService(null, tokenizer)
@@ -49,7 +49,7 @@ class IndexerServiceFactory {
          */
         fun lambdaTokenizerWithCustomLinesIndexerService(
             delimiterPattern: String,
-            tokenizer: (String) -> Sequence<String>
+            tokenizer: (String) -> Collection<String>
         ): IndexerService {
             return IndexerService(delimiterPattern, tokenizer)
         }

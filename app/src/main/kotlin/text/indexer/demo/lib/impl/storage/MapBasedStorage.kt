@@ -1,8 +1,8 @@
 package text.indexer.demo.lib.impl.storage
 
-import com.google.common.collect.Multimaps
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * Multimap based storage
@@ -14,34 +14,42 @@ import java.util.concurrent.ConcurrentHashMap
  * DEBUG DemoApp - Using 610MB, indexed 2148614 words - 44sec
  */
 class MapBasedStorage:ReverseIndexStorage<String, Path> {
-    private var wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) { //TODO replace this multimap: overhead and not thread safe
-        ConcurrentHashMap.newKeySet()
-    }
+//    private val wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) { //TODO replace this multimap: overhead and not thread safe
+//        ConcurrentHashMap.newKeySet()
+//    }
+    private val addNewWordLock = ReentrantLock()
+    private val wordToFileMap = ConcurrentHashMap<String, MutableCollection<Path>>() //this is actually slower than multimap
 
     // Thread safe
     override fun size(): Int {
-        return wordToFileMap.keySet().size
+        return wordToFileMap.keys.size
     }
 
     // Not thread safe
     override fun remove(documents: Set<Path>){
-        wordToFileMap.keySet().forEach{
+        wordToFileMap.keys.forEach {
             val curDocs = wordToFileMap[it]
-            curDocs.removeAll(documents)
+            curDocs!!.removeAll(documents)
             if(curDocs.isEmpty()){
-                wordToFileMap.removeAll(it)
+                wordToFileMap.remove(it)
             }
-
         }
     }
 
     // Thread safe
     override fun get(keyword: String): Collection<Path> {
-        return wordToFileMap[keyword]
+        return wordToFileMap[keyword] ?: emptySet()
     }
 
     // Thread safe
     override fun put(keyword: String, document: Path) {
-        wordToFileMap.put(keyword, document)
+        if(wordToFileMap[keyword] == null){
+            addNewWordLock.run {
+                if(wordToFileMap[keyword] == null){
+                    wordToFileMap[keyword] = ConcurrentHashMap.newKeySet()
+                }
+            }
+        }
+        wordToFileMap[keyword]!!.add(document)
     }
 }
