@@ -21,10 +21,10 @@ suspend fun main() {
     //TODO make service closeable, removing watches, freeing resources
 //    delay(10000)
     val regex = Regex("[\\p{Punct}\\s]+")
-    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(regex)}
-//    val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
+//    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(regex)}
+    val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
 //    val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
-//    val indexerService = IndexerService(customDelimiter = "===", tokenizer = {s: String -> s.split(Regex("[\\p{Punct}\\s]+")).asSequence()})
+//    val indexerService = IndexerService(customDelimiter = "===", tokenizer = {s: String -> s.split(regex)})
 //    indexerService.index("app/src/main/resources/fileof_randomness.txt")
     indexerService.index("app/src/main/resources")
 //    repeat (3){

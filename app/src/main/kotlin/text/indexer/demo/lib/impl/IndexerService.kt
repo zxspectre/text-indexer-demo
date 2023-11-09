@@ -28,6 +28,12 @@ import kotlin.io.path.pathString
 
 private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
+private const val READ_WRITE_HEARTBEAT = 250L
+private const val FILE_MEMORY_PRINT_FACTOR = 1.2
+//^we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
+// as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
+// For now as it's an edge case of an edge case, it's not a priority, just use safest value.
+
 class IndexerService(
     customDelimiter: String?,
     tokenizer: ((String) -> Collection<String>)?,
@@ -48,13 +54,8 @@ class IndexerService(
     private val watchService: FsWatcher = FsWatcher()
     private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MultimapBasedStorage()
 
-    private val readWriteHeartbeat = 250L
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
     private val removalInProgress: AtomicBoolean = AtomicBoolean(false)
-    private val memoryPrintFactor = 1.2
-    //^we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
-    // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
-    // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
 
 
     init {
@@ -87,7 +88,7 @@ class IndexerService(
             removalInProgress.set(true)
             while (indexFilesJob.children.filter { !it.isCompleted }.count() > 0) {
                 //ideally wait on indexFilesJob.join() for only current children to complete instead
-                delay(readWriteHeartbeat)
+                delay(READ_WRITE_HEARTBEAT)
             }
             log.debug("Mark $files for deletion")
             reverseIndexStorage.remove(files)
@@ -140,9 +141,9 @@ class IndexerService(
         val allIndexingFilesSize = currentlyIndexingFileSize.get()
         val freeMemory =
             Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory() + Runtime.getRuntime().freeMemory()
-        if (allIndexingFilesSize + fileSize > (freeMemory / memoryPrintFactor)) {
+        if (allIndexingFilesSize + fileSize > (freeMemory / FILE_MEMORY_PRINT_FACTOR)) {
             Runtime.getRuntime().gc()
-            if (allIndexingFilesSize + fileSize > (freeMemory / memoryPrintFactor)) {
+            if (allIndexingFilesSize + fileSize > (freeMemory / FILE_MEMORY_PRINT_FACTOR)) {
                 log.debug(
                     "Currently indexing ${allIndexingFilesSize.mbSizeString()}, with suggested file " +
                             "its ${(allIndexingFilesSize + fileSize).mbSizeString()} " +

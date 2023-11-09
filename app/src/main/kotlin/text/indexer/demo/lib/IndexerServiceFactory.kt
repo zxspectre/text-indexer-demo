@@ -15,6 +15,7 @@ class IndexerServiceFactory {
 
 
         /**
+         * !Warning: slowest impl.
          * Word extractor that will split the text into words
          * based on specified delimiter Pattern (should be a valid java.util.regex.Pattern pattern).
          * Note that if you include only whitespace character, then punctuation marks will be part
