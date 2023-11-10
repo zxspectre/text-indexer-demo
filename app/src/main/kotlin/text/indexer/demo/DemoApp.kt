@@ -20,7 +20,7 @@ suspend fun main() {
     //TODO working multithreaded with same service instance
     //TODO make service closeable, removing watches, freeing resources
 //    delay(10000)
-    val regex = Regex("[\\p{Punct}\\s]+")
+    val regex = Regex("[\\p{Punct}\\s]++")
 //    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(regex)}
     val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
 //    val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")

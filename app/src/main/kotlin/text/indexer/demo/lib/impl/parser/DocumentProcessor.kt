@@ -37,7 +37,7 @@ class DocumentProcessor(
     }
 
     private fun processFileWithBufferedReader(file: Path) {
-        var wordsToSave = HashSet<String>()
+        var wordsToSave = ArrayList<String>()
         Files.newBufferedReader(file).use {
             val lineSplitter = tokenizer ?: { s: String -> defaultTokenizer(s) }
             while (it.ready()) {
@@ -51,7 +51,7 @@ class DocumentProcessor(
     }
 
     private fun processFileWithScanner(file: Path) {
-        var wordsToSave = HashSet<String>()
+        var wordsToSave = ArrayList<String>()
         Scanner(file).use {
             it.useDelimiter(customDelimiter)
             while (it.hasNext()) {
@@ -69,16 +69,18 @@ class DocumentProcessor(
     }
 
     private fun batchIntoCallback(
-        wordsToSave: java.util.HashSet<String>,
+        wordsToSave: ArrayList<String>,
         file: Path,
         force: Boolean
-    ): java.util.HashSet<String> {
+    ): ArrayList<String> {
         if (wordsToSave.size > BULK_SIZE || force) {
             documentProcessorCoroutineScope.launch {
-                wordsToSave.forEach { w -> wordCallback.invoke(w, file) }
+                val wordSet = HashSet<String>()
+                wordSet.addAll(wordsToSave)
+                wordSet.forEach { w -> wordCallback.invoke(w, file) }
             }
             //TODO check no blocking ops up by stack - could be threads starvation issue?
-            return HashSet()
+            return ArrayList()
         }
         return wordsToSave
     }
