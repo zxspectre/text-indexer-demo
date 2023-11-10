@@ -1,10 +1,13 @@
 package text.indexer.demo.lib.impl.parser
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Scanner
+import kotlin.coroutines.CoroutineContext
 
 /**
  * if (tokenizer == null && customDelimiter == null) -> "Standard word extractor"
@@ -15,11 +18,13 @@ import java.util.Scanner
 private const val BULK_SIZE = 10000 //TODO make it dynamic?
 
 class DocumentProcessor(
+    coroutineContext: CoroutineContext,
     private val tokenizer: ((String) -> Collection<String>)?,
     private val customDelimiter: String?,
     private val wordCallback: (String, Path) -> Unit
 ) {
     private val defaultRegex = Regex("[\\p{Punct}\\s]+")
+    private val documentProcessorCoroutineScope = CoroutineScope(coroutineContext)
 
     suspend fun extractWords(file: Path) {
         withContext(Dispatchers.IO) {
@@ -69,8 +74,9 @@ class DocumentProcessor(
         force: Boolean
     ): java.util.HashSet<String> {
         if (wordsToSave.size > BULK_SIZE || force) {
-            wordsToSave.forEach { w -> wordCallback.invoke(w, file) }
-            //TODO run this in coroutine to parallelize
+            documentProcessorCoroutineScope.launch {
+                wordsToSave.forEach { w -> wordCallback.invoke(w, file) }
+            }
             //TODO check no blocking ops up by stack - could be threads starvation issue?
             return HashSet()
         }

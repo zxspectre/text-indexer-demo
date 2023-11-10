@@ -3,6 +3,7 @@ package text.indexer.demo.lib.impl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -41,15 +42,16 @@ class IndexerService(
     private val tryToPreventOom: Boolean = true,
     private val maxWordLength: Int = 16384 //TODO limit buffer length to this, when searching for delimiters (4binaries)
 ) : Closeable {
-
+    private val indexerServiceCoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val documentProcessor = DocumentProcessor(
-        tokenizer, customDelimiter
+        indexerServiceCoroutineScope.coroutineContext,
+        tokenizer,
+        customDelimiter
     ) { word, doc -> processWordCallback(word, doc) }
 
     private val customDispatcher = Executors.newFixedThreadPool(indexerThreadPoolSize).asCoroutineDispatcher()
     private val indexFilesJob = Job()
-    private val indexFileCoroutineScope = CoroutineScope(customDispatcher + indexFilesJob)
-    private val handleChannelCoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val processFileCoroutineScope = CoroutineScope(customDispatcher + indexFilesJob)
 
     private val watchService: FsWatcher = FsWatcher()
     private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MultimapBasedStorage()
@@ -59,10 +61,10 @@ class IndexerService(
 
 
     init {
-        handleChannelCoroutineScope.launch {
-            while (handleChannelCoroutineScope.isActive) {
+        indexerServiceCoroutineScope.launch {
+            while (indexerServiceCoroutineScope.isActive) {
                 val event = watchService.fileEventChannel.receive()
-                when(event.type){
+                when (event.type) {
                     EventType.NEW -> processNewFiles(event.files)
                     EventType.DELETED -> processDeletedFiles(event.files)
                 }
@@ -71,13 +73,12 @@ class IndexerService(
     }
 
 
-
     private fun processNewFiles(files: Collection<Path>) {
-        if(removalInProgress.get()){
+        if (removalInProgress.get()) {
             throw RuntimeException("Shouldn't happen, ProgrammerNotFoundException.") //TODO remove removalInProgress after testing
         }
         files.forEach {
-            indexFileCoroutineScope.launch {
+            processFileCoroutineScope.launch {
                 index(it)
             }
         }
@@ -180,7 +181,7 @@ class IndexerService(
     override fun close() {
         watchService.close()
         customDispatcher.close()
-        indexFileCoroutineScope.cancel()
-        handleChannelCoroutineScope.cancel()
+        processFileCoroutineScope.cancel()
+        indexerServiceCoroutineScope.cancel()
     }
 }
