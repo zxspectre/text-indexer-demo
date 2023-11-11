@@ -30,3 +30,5 @@ Demo of a Kotlin library for text indexation
 - handle concurrent modification of indexed file - perhaps check TS before indexing and after - reindex if changed
 - Dynamically adjust various delay/bulk parameters, like DocumentProcessor.SEQUENCE_BULK_SIZE
 - Better callbacks for indexation status and faster startup times
+- Review classes access modifiers
+- Implement machine independent load testing

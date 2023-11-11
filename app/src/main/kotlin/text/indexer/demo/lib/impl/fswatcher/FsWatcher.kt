@@ -13,20 +13,17 @@ import java.io.Closeable
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.locks.ReentrantLock
-import java.util.stream.Collectors
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 
 
-class FsWatcher : Closeable {
+class FsWatcher(val pollingIntervalMillis: Long = 2000L) : Closeable {
     val fileEventChannel = Channel<FSEvent>(Channel.BUFFERED)
 
     private val watchRequestChannel = Channel<WatchRequest>(Channel.BUFFERED)
 
     private val log: Logger = LoggerFactory.getLogger(FsWatcher::class.java)
-
-    private val pollingIntervalMillis = 2000L
 
     private val watchedFilesLock = ReentrantLock()
     private val mutableWatchedFiles = HashSet<Path>()
@@ -35,7 +32,6 @@ class FsWatcher : Closeable {
     // no concurrent access
     private val fileModificationTimestamps = HashMap<Path, Long>()
 
-    private var watchedDirFiles = HashSet<Path>()
     private val scope = CoroutineScope(Dispatchers.Default)
 
 
@@ -67,51 +63,42 @@ class FsWatcher : Closeable {
     }
 
     private fun updateWatchedFilesDirs(watchMsg: WatchRequest) {
+        log.trace("Received request to change polled entries, type: ${watchMsg.type}")
         watchedFilesLock.run {
             when (watchMsg.type) {
                 RequestType.NEW_FILE -> mutableWatchedFiles.add(watchMsg.path)
                 RequestType.NEW_DIR -> mutableWatchedDirs.add(watchMsg.path)
-                RequestType.DELETE -> mutableWatchedFiles.remove(watchMsg.path) && mutableWatchedDirs.remove(watchMsg.path)
+                RequestType.DELETE -> mutableWatchedFiles.remove(watchMsg.path) || mutableWatchedDirs.remove(watchMsg.path)
             }
         }
     }
 
 
     private fun pollForFsChanges() {
+        var previouslyPolledFiles = HashSet<Path>()
         scope.launch {
             delay(100) //small pause after creation if some files are immediately added
-            val watchedFiles: Set<Path>
-            val watchedDirs: Set<Path>
-            watchedFilesLock.run {
-                watchedFiles = HashSet(mutableWatchedFiles)
-                watchedDirs = HashSet(mutableWatchedDirs)
-            }
-
+            var watchedFiles: Set<Path>
+            var watchedDirs: Set<Path>
             while (scope.isActive) {
-                log.trace("polling FS")
+                watchedFilesLock.run {
+                    watchedFiles = HashSet(mutableWatchedFiles)
+                    watchedDirs = HashSet(mutableWatchedDirs)
+                }
+                log.trace("polling FS, ${watchedFiles.size} files / ${watchedDirs.size} dirs")
                 // Handle changes to watched directories
                 val currentDirFiles = HashSet<Path>()
                 watchedDirs.forEach { collectFilesInDirRecurse(it, currentDirFiles) }
-                val deletedDirFiles = watchedDirFiles.subtract(currentDirFiles)
+                val deletedFiles = previouslyPolledFiles.subtract(currentDirFiles).subtract(watchedFiles).toMutableSet()
 
-                val deletedFiles = HashSet<Path>()
-                deletedFiles.addAll(deletedDirFiles.stream()
-                    .filter {
-                        // Files that disappeared while scanning for dirs could be deleted or encapsulating dir was
-                        // removed. Either way we shouldn't remove such files if they are watched separately as a file
-                        !watchedFiles.contains(it)
-                    }
-                    .collect(Collectors.toSet()))
-
-                val mayBeModifiedFiles = HashSet<Path>(currentDirFiles)
+                val currentFiles = HashSet<Path>(currentDirFiles)
                 watchedFiles.forEach {
                     if (it.exists()) {
-                        mayBeModifiedFiles.add(it)
+                        currentFiles.add(it)
                     } else {
                         deletedFiles.add(it)
                     }
                 }
-
 
                 deletedFiles.forEach {
                     log.trace("file deleted $it")
@@ -120,7 +107,7 @@ class FsWatcher : Closeable {
                 //handle mayBeModifiedFiles
                 val modifiedFiles = HashSet<Path>()
                 val newFiles = HashSet<Path>()
-                mayBeModifiedFiles.forEach {
+                currentFiles.forEach {
                     val lastModified = Files.getLastModifiedTime(it).toMillis()
                     if (!fileModificationTimestamps.containsKey(it)) {
                         newFiles.add(it)
@@ -134,7 +121,7 @@ class FsWatcher : Closeable {
 
                 sendEvent(EventType.NEW, newFiles, modifiedFiles)
 
-                watchedDirFiles = currentDirFiles
+                previouslyPolledFiles = currentFiles
 
                 delay(pollingIntervalMillis)
             }

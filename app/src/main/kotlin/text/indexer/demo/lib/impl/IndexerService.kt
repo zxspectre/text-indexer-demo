@@ -64,6 +64,7 @@ class IndexerService internal constructor(
         indexerServiceCoroutineScope.launch {
             while (indexerServiceCoroutineScope.isActive) {
                 val event = watchService.fileEventChannel.receive()
+                log.trace("After FS Poll: received event with type: ${event.type}")
                 when (event.type) {
                     EventType.NEW -> processNewFiles(event.files)
                     EventType.DELETED -> processDeletedFiles(event.files)
