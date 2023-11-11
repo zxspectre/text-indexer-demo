@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock
  */
 class MapBasedStorage:ReverseIndexStorage<String, Path> {
     private val addNewWordLock = ReentrantLock()
-    private val wordToFileMap = ConcurrentHashMap<String, MutableCollection<Path>>() //this is actually slower than multimap
+    private val wordToFileMap = ConcurrentHashMap<String, MutableCollection<Path>>()
 
     // Thread safe
     override fun size(): Int {
