@@ -3,7 +3,6 @@ package text.indexer.demo.lib
 import text.indexer.demo.lib.impl.IndexerService
 
 class IndexerServiceFactory {
-    //TODO get rid of factory
     companion object {
         /**
          * Standard word extractor that will split the text by any whitespace characters

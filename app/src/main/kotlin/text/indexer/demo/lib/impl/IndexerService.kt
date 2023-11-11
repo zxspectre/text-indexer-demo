@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.impl.fswatcher.EventType
 import text.indexer.demo.lib.impl.fswatcher.FsWatcher
 import text.indexer.demo.lib.impl.parser.DocumentProcessor
-import text.indexer.demo.lib.impl.storage.MultimapBasedStorage
+import text.indexer.demo.lib.impl.storage.MapBasedStorage
 import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
 import text.indexer.demo.lib.impl.util.mbSizeString
 import java.io.Closeable
@@ -54,7 +54,7 @@ class IndexerService(
     private val processFileCoroutineScope = CoroutineScope(customDispatcher + indexFilesJob)
 
     private val watchService: FsWatcher = FsWatcher()
-    private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MultimapBasedStorage()
+    private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MapBasedStorage()
 
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
     private val removalInProgress: AtomicBoolean = AtomicBoolean(false)
@@ -119,9 +119,12 @@ class IndexerService(
         return currentlyIndexingFileSize.get()
     }
 
+    fun getInprogressFiles(): Int{
+        return indexFilesJob.children.filter { !it.isCompleted }.count()
+    }
+
     private suspend fun index(file: Path) {
         require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
-        //TODO ?concurrent modification of indexed file - perhaps check TS before indexing and after
         val fileSize = file.fileSize()
         if (tryToPreventOom && oomPossible(fileSize)) {
             log.debug(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")

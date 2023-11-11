@@ -12,10 +12,6 @@ private val log: Logger = LoggerFactory.getLogger("DemoApp")
 suspend fun main() {
     log.info("Running with maxheap = ${Runtime.getRuntime().maxMemory().mbSizeString()}")
 
-    //TODO add word postprocessor? implement case-insensitive index/search
-    //TODO if file not a text - skip
-    //TODO working with several instances of services
-    //TODO working multithreaded with same service instance
 //    delay(10000)
     val regex = Regex("[\\p{Punct}\\s]++")
 //    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.splitToSequence(regex)}
@@ -30,7 +26,9 @@ suspend fun main() {
         indexerService.search("Sherlock")
         Runtime.getRuntime().gc()
         log.debug("Using ${(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()).mbSizeString()}, " +
-                "indexed ${indexerService.getIndexedWordsCnt()} words, inprogress=${indexerService.getFilesSizeInIndexQueue().mbSizeString()}")
+                "indexed ${indexerService.getIndexedWordsCnt()} words, " +
+                "inprogress=${indexerService.getInprogressFiles()}/${indexerService.getFilesSizeInIndexQueue().mbSizeString()}")
+
     }
     indexerService.close()
     println(" ------  DONE   -------- ")

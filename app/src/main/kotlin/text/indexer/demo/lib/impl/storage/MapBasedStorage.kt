@@ -14,9 +14,6 @@ import java.util.concurrent.locks.ReentrantLock
  * DEBUG DemoApp - Using 610MB, indexed 2148614 words - 44sec
  */
 class MapBasedStorage:ReverseIndexStorage<String, Path> {
-//    private val wordToFileMap = Multimaps.newSetMultimap(ConcurrentHashMap<String, Collection<Path>>()) { //TODO replace this multimap: overhead and not thread safe
-//        ConcurrentHashMap.newKeySet()
-//    }
     private val addNewWordLock = ReentrantLock()
     private val wordToFileMap = ConcurrentHashMap<String, MutableCollection<Path>>() //this is actually slower than multimap
 

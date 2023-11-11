@@ -15,7 +15,7 @@ import kotlin.coroutines.CoroutineContext
  * if (tokenizer != null && customDelimiter == null) -> "Tokenizer that iterates on lines")
  * if (tokenizer != null && customDelimiter != null) -> "Tokenizer that iterates on custom tokens")
  */
-private const val SEQUENCE_BULK_SIZE = 250 //TODO make it dynamic?
+private const val SEQUENCE_BULK_SIZE = 250
 private const val STRING_BULK_SIZE = 10000
 
 class DocumentProcessor(
