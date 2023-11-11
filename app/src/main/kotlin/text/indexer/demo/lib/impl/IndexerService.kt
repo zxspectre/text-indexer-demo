@@ -37,10 +37,10 @@ private const val FILE_MEMORY_PRINT_FACTOR = 1.2
 
 class IndexerService(
     customDelimiter: String?,
-    tokenizer: ((String) -> Collection<String>)?,
+    tokenizer: ((String) -> Sequence<String>)?,
     indexerThreadPoolSize: Int = 2,
     private val tryToPreventOom: Boolean = true,
-    private val maxWordLength: Int = 16384 //TODO limit buffer length to this, when searching for delimiters (4binaries)
+    private val maxWordLength: Int = 16384
 ) : Closeable {
     private val indexerServiceCoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val documentProcessor = DocumentProcessor(

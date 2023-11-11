@@ -8,6 +8,7 @@ class IndexerServiceFactory {
         /**
          * Standard word extractor that will split the text by any whitespace characters
          * or punctuation marks.
+         * 966Mb -> 5 sec
          */
         fun wordExtractingIndexerService(): IndexerService {
             return IndexerService(null, null)
@@ -21,7 +22,7 @@ class IndexerServiceFactory {
          * Note that if you include only whitespace character, then punctuation marks will be part
          * of the extracted words.
          * DEBUG DemoApp - Using 611MB, indexed 2148614 words, inprogress=0MB
-         * 966Mb -> 46 sec
+         * 966Mb -> 30 sec
          */
         fun delimiterBasedIndexerService(
             delimiterPattern: String
@@ -33,12 +34,11 @@ class IndexerServiceFactory {
         /**
          * Will extract words using a specified by lambda tokenizer that accepts text file line
          * as an input and outputs a list of words
-         * 966Mb -> 32 sec
+         * 966Mb -> 5 sec
          */
         fun lambdaTokenizerIndexerService(
-            tokenizer: (String) -> Collection<String>
+            tokenizer: (String) -> Sequence<String>
         ): IndexerService {
-            //TODO change List<String> to Sequence<String>
             return IndexerService(null, tokenizer)
         }
 
@@ -50,7 +50,7 @@ class IndexerServiceFactory {
          */
         fun lambdaTokenizerWithCustomLinesIndexerService(
             delimiterPattern: String,
-            tokenizer: (String) -> Collection<String>
+            tokenizer: (String) -> Sequence<String>
         ): IndexerService {
             return IndexerService(delimiterPattern, tokenizer)
         }

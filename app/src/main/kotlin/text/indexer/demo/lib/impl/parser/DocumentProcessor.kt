@@ -15,11 +15,12 @@ import kotlin.coroutines.CoroutineContext
  * if (tokenizer != null && customDelimiter == null) -> "Tokenizer that iterates on lines")
  * if (tokenizer != null && customDelimiter != null) -> "Tokenizer that iterates on custom tokens")
  */
-private const val BULK_SIZE = 10000 //TODO make it dynamic?
+private const val SEQUENCE_BULK_SIZE = 250 //TODO make it dynamic?
+private const val STRING_BULK_SIZE = 10000
 
 class DocumentProcessor(
     coroutineContext: CoroutineContext,
-    private val tokenizer: ((String) -> Collection<String>)?,
+    private val tokenizer: ((String) -> Sequence<String>)?,
     private val customDelimiter: String?,
     private val wordCallback: (String, Path) -> Unit
 ) {
@@ -37,17 +38,16 @@ class DocumentProcessor(
     }
 
     private fun processFileWithBufferedReader(file: Path) {
-        var wordsToSave = ArrayList<String>()
+        var wordsToSave = ArrayList<Sequence<String>>()
         Files.newBufferedReader(file).use {
             val lineSplitter = tokenizer ?: { s: String -> defaultTokenizer(s) }
             while (it.ready()) {
                 val line = it.readLine()
-                val words = lineSplitter.invoke(line)
-                wordsToSave.addAll(words)
-                wordsToSave = batchIntoCallback(wordsToSave, file, false)
+                wordsToSave.add(lineSplitter.invoke(line))
+                wordsToSave = batchSequenceIntoCallback(wordsToSave, file, false)
             }
         }
-        batchIntoCallback(wordsToSave, file, true)
+        batchSequenceIntoCallback(wordsToSave, file, true)
     }
 
     private fun processFileWithScanner(file: Path) {
@@ -56,38 +56,59 @@ class DocumentProcessor(
             it.useDelimiter(customDelimiter)
             while (it.hasNext()) {
                 val delimitedText = it.next()
-                if (tokenizer != null) {
-                    //TODO is it possible to cache processed words to make things faster?
-                    wordsToSave.addAll(tokenizer.invoke(delimitedText)) //TODO can I split string into set, not list?
-                } else {
-                    wordsToSave.add(delimitedText)
-                }
-                wordsToSave = batchIntoCallback(wordsToSave, file, false)
+                wordsToSave.add(delimitedText)
+                wordsToSave = batchStringIntoCallback(wordsToSave, tokenizer, file, false)
             }
         }
-        batchIntoCallback(wordsToSave, file, true)
+        batchStringIntoCallback(wordsToSave, tokenizer, file, true)
     }
 
-    private fun batchIntoCallback(
-        wordsToSave: ArrayList<String>,
+    private fun batchStringIntoCallback(
+        wordsToSave: java.util.ArrayList<String>,
+        tokenizer: ((String) -> Sequence<String>)?,
         file: Path,
         force: Boolean
-    ): ArrayList<String> {
-        if (wordsToSave.size > BULK_SIZE || force) {
-            documentProcessorCoroutineScope.launch {
-                val wordSet = HashSet<String>()
-                wordSet.addAll(wordsToSave)
-                wordSet.forEach { w -> wordCallback.invoke(w, file) }
+    ): java.util.ArrayList<String> {
+        if (wordsToSave.size > STRING_BULK_SIZE || force) {
+            if (tokenizer != null) {
+                documentProcessorCoroutineScope.launch {
+                    val wordSet = HashSet<String>()
+                    wordsToSave.forEach { wordSet.addAll(tokenizer.invoke(it)) }
+                    wordSet.forEach {
+                        wordCallback.invoke(it, file)
+                    }
+                }
+            } else {
+                documentProcessorCoroutineScope.launch {
+                    val wordSet = HashSet<String>()
+                    wordSet.addAll(wordsToSave)
+                    wordSet.forEach { wordCallback.invoke(it, file) }
+                }
             }
-            //TODO check no blocking ops up by stack - could be threads starvation issue?
             return ArrayList()
         }
         return wordsToSave
     }
 
-    private fun defaultTokenizer(line: String): Collection<String> {
-        return line.split(defaultRegex)
+    private fun batchSequenceIntoCallback(
+        wordsSequencesToSave: ArrayList<Sequence<String>>,
+        file: Path,
+        force: Boolean
+    ): ArrayList<Sequence<String>> {
+        if (wordsSequencesToSave.size > SEQUENCE_BULK_SIZE || force) {
+            documentProcessorCoroutineScope.launch {
+                val wordSet = HashSet<String>()
+                wordsSequencesToSave.forEach { wordSet.addAll(it) }
+                wordSet.forEach { w -> wordCallback.invoke(w, file) }
+            }
+            //TODO check no blocking ops up by stack - could be threads starvation issue?
+            return ArrayList()
+        }
+        return wordsSequencesToSave
     }
 
+    private fun defaultTokenizer(line: String): Sequence<String> {
+        return line.splitToSequence(defaultRegex)
+    }
 
 }

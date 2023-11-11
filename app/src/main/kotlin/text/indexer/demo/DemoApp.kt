@@ -12,19 +12,16 @@ private val log: Logger = LoggerFactory.getLogger("DemoApp")
 suspend fun main() {
     log.info("Running with maxheap = ${Runtime.getRuntime().maxMemory().mbSizeString()}")
 
-    //TODO change lambdas from: List<String> to Sequence<String>
     //TODO add word postprocessor? implement case-insensitive index/search
-    //TODO replace factory with builder? or have two implementations, separate one for the 4th case
     //TODO if file not a text - skip
     //TODO working with several instances of services
     //TODO working multithreaded with same service instance
-    //TODO make service closeable, removing watches, freeing resources
 //    delay(10000)
     val regex = Regex("[\\p{Punct}\\s]++")
-//    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.split(regex)}
+//    val indexerService = IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.splitToSequence(regex)}
     val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
 //    val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
-//    val indexerService = IndexerService(customDelimiter = "===", tokenizer = {s: String -> s.split(regex)})
+//    val indexerService = IndexerService(customDelimiter = "===", tokenizer = {s: String -> s.splitToSequence(regex)})
 //    indexerService.index("app/src/main/resources/fileof_randomness.txt")
     indexerService.index("app/src/main/resources")
 //    repeat (3){
