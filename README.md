@@ -25,10 +25,13 @@ Demo of a Kotlin library for text indexation
 
 ## Nice to have further improvements
 - Remove or refactor IndexerServiceFactory, instead document various implementation specifics somewhere else
-- Support (indexed/searched) words postprocessor. One specfic example is implementing case-insensitive index/search
+- Support (indexed/searched) words postprocessor. One specific example is implementing case-insensitive index/search
 - If file not a text - skip
 - handle concurrent modification of indexed file - perhaps check TS before indexing and after - reindex if changed
 - Dynamically adjust various delay/bulk parameters, like DocumentProcessor.SEQUENCE_BULK_SIZE
 - Better callbacks for indexation status and faster startup times
 - Review classes access modifiers
 - Implement machine independent load testing
+- Review Job / Dispatcher / CoContext structure - tested that current impl works and terminates, but maybe it's not the kotlin way
+- Handle potential exceptions in children contexts gracefully
+- Remove duplicated code from tests

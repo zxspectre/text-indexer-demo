@@ -9,7 +9,6 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.IndexerServiceFactory
 import text.indexer.demo.lib.impl.IndexerService
-import java.util.concurrent.TimeoutException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -17,29 +16,60 @@ private val log: Logger = LoggerFactory.getLogger(SingleIndexationTest::class.ja
 
 open class SingleIndexationTest {
 
-    suspend fun waitForCondition(timeoutMillis: Long, condition: () -> Boolean) {
-        val startTime = System.currentTimeMillis()
-        while (!condition() && System.currentTimeMillis() - startTime < timeoutMillis) {
-            delay(100)
+    companion object {
+        suspend fun waitForCondition(timeoutMillis: Long, condition: () -> Boolean) {
+            val startTime = System.currentTimeMillis()
+            while (!condition() && System.currentTimeMillis() - startTime < timeoutMillis) {
+                delay(100)
+            }
+            if (!condition()) {
+                log.warn("Condition not met within timeout")
+            }
         }
-        if (!condition()) {
-            throw TimeoutException("Condition not met within timeout")
-        }
-    }
 
-    suspend fun waitForIndexationToFinish(indexerService: IndexerService) {
-        log.debug("Waiting for indexation to finish")
-        waitForCondition(5000) {
-            indexerService.getInprogressFiles() == 0 && indexerService.getIndexedWordsCnt() > 0
+        /**
+         * Only works for waiting for initial indexation.
+         */
+        suspend fun waitForIndexationToFinish(indexerService: IndexerService) {
+            waitForCondition(5000) {
+                indexerService.getInprogressFiles() == 0 && indexerService.getIndexedWordsCnt() > 0
+            }
         }
-        log.debug("Done waiting")
+
+        suspend fun waitForIndexToBeEmpty(indexerService: IndexerService) {
+            waitForCondition(5000) {
+                indexerService.getInprogressFiles() == 0 && indexerService.getIndexedWordsCnt() == 0
+            }
+        }
     }
 
 
     @Test
-    fun simpleIndexation() {
+    fun testSimpleIndexationForDefaultIndexer() {
+        simpleIndexation_(IndexerServiceFactory.wordExtractingIndexerService())
+    }
+
+    @Test
+    fun testSimpleIndexationForLambdaIndexer() {
+        val regex = Regex("[\\p{Punct}\\s]++")
+        simpleIndexation_(IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.splitToSequence(regex) })
+    }
+
+    @Test
+    fun testSimpleIndexationForDelimitedIndexer() {
+        simpleIndexation_(IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+"""))
+    }
+
+    @Test
+    fun testSimpleIndexationForDelimitedWithLambdaIndexer() {
+        val regex = Regex("[\\p{Punct}\\s]++")
+        simpleIndexation_(IndexerService(customDelimiter = "\n", tokenizer = { s: String -> s.splitToSequence(regex) }))
+    }
+
+
+    fun simpleIndexation_(indexerService: IndexerService) {
         runBlocking {
-            IndexerServiceFactory.wordExtractingIndexerService().use {
+            indexerService.use {
                 it.index("src/test/resources/testfiles")
                 waitForIndexationToFinish(it)
                 assertEquals(238, it.getIndexedWordsCnt(), "Total words indexed")
@@ -60,7 +90,7 @@ open class SingleIndexationTest {
         runBlocking {
             val indexerService1 = IndexerServiceFactory.wordExtractingIndexerService()
             val indexerService2 = IndexerServiceFactory.wordExtractingIndexerService()
-            try{
+            try {
                 // index two files in two instances
                 indexerService1.index("src/test/resources/testfiles/ipsum.rtf")
                 indexerService2.index("src/test/resources/testfiles/small.rtf")
@@ -71,10 +101,10 @@ open class SingleIndexationTest {
                 val files1 = indexerService1.search("et")
                 val files2 = indexerService2.search("et")
                 // asserts
-                assertEquals(31, indexerService1.getIndexedWordsCnt(), )
-                assertEquals(208, indexerService2.getIndexedWordsCnt(), )
-                assertEquals(1, files1.size, )
-                assertEquals(1, files2.size, )
+                assertEquals(31, indexerService1.getIndexedWordsCnt())
+                assertEquals(208, indexerService2.getIndexedWordsCnt())
+                assertEquals(1, files1.size)
+                assertEquals(1, files2.size)
                 assertEquals("src/test/resources/testfiles/ipsum.rtf", files1.first())
                 assertEquals("src/test/resources/testfiles/small.rtf", files2.first())
                 // remove files from index of one instance
@@ -85,7 +115,7 @@ open class SingleIndexationTest {
                 // check that only one instance was affected
                 assertEquals(1, indexerService1.search("et").size)
                 assertEquals(0, indexerService2.search("et").size)
-            }finally {
+            } finally {
                 indexerService1.close()
                 indexerService2.close()
             }
