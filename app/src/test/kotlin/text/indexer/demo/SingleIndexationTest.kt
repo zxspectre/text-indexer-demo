@@ -63,7 +63,11 @@ open class SingleIndexationTest {
     @Test
     fun testSimpleIndexationForDelimitedWithLambdaIndexer() {
         val regex = Regex("[\\p{Punct}\\s]++")
-        simpleIndexation_(IndexerService(customDelimiter = "\n", tokenizer = { s: String -> s.splitToSequence(regex) }))
+        simpleIndexation_(
+            IndexerServiceFactory.lambdaTokenizerWithCustomLinesIndexerService(
+                "\n",
+                { s: String -> s.splitToSequence(regex) })
+        )
     }
 
 

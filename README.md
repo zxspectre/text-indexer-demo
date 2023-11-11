@@ -1,12 +1,10 @@
 # text-indexer-demo
 Demo of a Kotlin library for text indexation
-
-## TODO
-- test working with several instances of services
-- test working multithreaded with same service instance
+See `text.indexer.demo.Main` for sample usage.
 
 
-## Agreed upon requirements
+
+## Requirements
 - Support add and remove file/dir methods
 - Implement search method that will return reference to documents containing words
 - Support for concurrent access
