@@ -35,7 +35,7 @@ private const val FILE_MEMORY_PRINT_FACTOR = 1.2
 // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
 // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
 
-class IndexerService(
+class IndexerService internal constructor(
     customDelimiter: String?,
     tokenizer: ((String) -> Sequence<String>)?,
     indexerThreadPoolSize: Int = 2,
@@ -72,6 +72,34 @@ class IndexerService(
         }
     }
 
+    suspend fun index(path: String) {
+        watchService.watch(Path(path))
+    }
+
+    suspend fun unindex(path: String) {
+        watchService.unwatch(Path(path))
+    }
+
+    suspend fun index(path: Path) {
+        watchService.watch(path)
+    }
+
+    suspend fun unindex(path: Path) {
+        watchService.unwatch(path)
+    }
+
+    fun getIndexedWordsCnt(): Int {
+        return reverseIndexStorage.size()
+    }
+
+    fun getFilesSizeInIndexQueue(): Long {
+        return currentlyIndexingFileSize.get()
+    }
+
+    fun getInprogressFiles(): Int{
+        return indexFilesJob.children.filter { !it.isCompleted }.count()
+    }
+
 
     private fun processNewFiles(files: Collection<Path>) {
         if (removalInProgress.get()) {
@@ -79,7 +107,7 @@ class IndexerService(
         }
         files.forEach {
             processFileCoroutineScope.launch {
-                index(it)
+                index_(it)
             }
         }
     }
@@ -103,27 +131,7 @@ class IndexerService(
     }
 
 
-    suspend fun index(path: String) {
-        watchService.watch(Path(path))
-    }
-
-    suspend fun unindex(path: String) {
-        watchService.unwatch(Path(path))
-    }
-
-    fun getIndexedWordsCnt(): Int {
-        return reverseIndexStorage.size()
-    }
-
-    fun getFilesSizeInIndexQueue(): Long {
-        return currentlyIndexingFileSize.get()
-    }
-
-    fun getInprogressFiles(): Int{
-        return indexFilesJob.children.filter { !it.isCompleted }.count()
-    }
-
-    private suspend fun index(file: Path) {
+    private suspend fun index_(file: Path) {
         require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
         val fileSize = file.fileSize()
         if (tryToPreventOom && oomPossible(fileSize)) {
@@ -168,14 +176,14 @@ class IndexerService(
                             "current limit is $maxWordLength"
                 )
             } else {
-                reverseIndexStorage.put(word.lowercase(), filePath) //TODO remove lowercase()
+                reverseIndexStorage.put(word, filePath)
             }
         }
     }
 
     fun search(word: String): Collection<String> {
         log.trace("Searching for '$word'")
-        val res = reverseIndexStorage.get(word.lowercase())   //TODO remove lowercase()
+        val res = reverseIndexStorage.get(word)
             .map { it.pathString }
         log.debug("Found '$word' in $res")
         return res

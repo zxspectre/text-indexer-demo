@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.IndexerServiceFactory
 import text.indexer.demo.lib.impl.util.mbSizeString
 
-//class IndexerServiceDemoApp{}
+class Main{}
 private val log: Logger = LoggerFactory.getLogger("DemoApp")
 
 suspend fun main() {
@@ -19,7 +19,7 @@ suspend fun main() {
 //    val indexerService = IndexerServiceFactory.delimiterBasedIndexerService("""[\p{Punct}\s]+""")
 //    val indexerService = IndexerService(customDelimiter = "===", tokenizer = {s: String -> s.splitToSequence(regex)})
 //    indexerService.index("app/src/main/resources/fileof_randomness.txt")
-    indexerService.index("app/src/main/resources")
+    indexerService.index("app/src/main/resources/inner/testfile.txt")
 //    repeat (3){
     while (true){
         delay(3000)
