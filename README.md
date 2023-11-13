@@ -1,6 +1,10 @@
 # text-indexer-demo
 Demo of a Kotlin library for text indexation
-See `text.indexer.demo.Main` for sample usage.
+See `text.indexer.demo.SimpleRun` for sample usage.
+Uses JDK17.
+
+## Running the CLI
+- `./gradlew run` to start the CLI
 
 
 

@@ -48,7 +48,7 @@ java {
 
 application {
     // Define the main class for the application.
-    mainClass = 'text.indexer.demo.AppKt'
+    mainClass = 'text.indexer.demo.MainApp'
 }
 
 tasks.named('test') {

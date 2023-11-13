@@ -6,4 +6,4 @@ enum class EventType {
     NEW, DELETED
 }
 
-class FSEvent(val type: EventType, val files: Set<Path>)
+data class FSEvent(val type: EventType, val files: Set<Path>)

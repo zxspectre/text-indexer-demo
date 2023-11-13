@@ -6,12 +6,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.impl.fswatcher.EventType
+import text.indexer.demo.lib.impl.fswatcher.FSEvent
 import text.indexer.demo.lib.impl.fswatcher.FsWatcher
 import text.indexer.demo.lib.impl.parser.DocumentProcessor
 import text.indexer.demo.lib.impl.storage.MapBasedStorage
@@ -19,12 +21,13 @@ import text.indexer.demo.lib.impl.storage.ReverseIndexStorage
 import text.indexer.demo.lib.impl.util.mbSizeString
 import java.io.Closeable
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.Path
 import kotlin.io.path.fileSize
 import kotlin.io.path.isDirectory
+import kotlin.io.path.notExists
 import kotlin.io.path.pathString
 
 private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
@@ -34,7 +37,18 @@ private const val FILE_MEMORY_PRINT_FACTOR = 1.2
 //^we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
 // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
 // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
-
+/**
+ * Indexer service.
+ * See [text.indexer.demo.lib.IndexerServiceFactory] for examples
+ * of creating this service in regards to `customDelimiter` and `tokenizer`
+ *
+ * tryToPreventOom - will skip indexation if file size is too big for currently free memory and no files are indexed ATM
+ *
+ * maxWordLength - defines max length of word that will be indexed
+ *
+ * Also note this service's channel defined in [indexerErrorsChannel], that can be used for async notification about
+ * problems.
+ */
 class IndexerService internal constructor(
     customDelimiter: String?,
     tokenizer: ((String) -> Sequence<String>)?,
@@ -42,6 +56,11 @@ class IndexerService internal constructor(
     private val tryToPreventOom: Boolean = true,
     private val maxWordLength: Int = 16384
 ) : Closeable {
+    /**
+     * Buffered channel to which this service tries sending messages about indexation errors.
+     * See [IndexError]
+     */
+    val indexerErrorsChannel = Channel<IndexError>(Channel.BUFFERED)
     private val indexerServiceCoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val documentProcessor = DocumentProcessor(
         indexerServiceCoroutineScope.coroutineContext,
@@ -55,9 +74,10 @@ class IndexerService internal constructor(
 
     private val watchService: FsWatcher = FsWatcher()
     private val reverseIndexStorage: ReverseIndexStorage<String, Path> = MapBasedStorage()
+    private val filesWithBadWords = ConcurrentHashMap<Path, Long>()
 
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
-    private val removalInProgress: AtomicBoolean = AtomicBoolean(false)
+    private val currentlyIndexingFiles = ConcurrentHashMap<Path, Boolean>()
 
 
     init {
@@ -74,14 +94,18 @@ class IndexerService internal constructor(
     }
 
     suspend fun index(path: String) {
-        watchService.watch(Path(path))
+        index(Path(path))
     }
 
     suspend fun unindex(path: String) {
-        watchService.unwatch(Path(path))
+        unindex(Path(path))
     }
 
     suspend fun index(path: Path) {
+        if (path.notExists()) {
+            log.error("Specified path `$path` does not exist, cannot index")
+            throw IllegalArgumentException("Specified path `$path` does not exist, cannot index")
+        }
         watchService.watch(path)
     }
 
@@ -97,58 +121,82 @@ class IndexerService internal constructor(
         return currentlyIndexingFileSize.get()
     }
 
-    fun getInprogressFiles(): Int{
-        return indexFilesJob.children.filter { !it.isCompleted }.count()
+    fun getInprogressFiles(): Int {
+        return currentlyIndexingFiles.size
     }
 
 
     private fun processNewFiles(files: Collection<Path>) {
-        if (removalInProgress.get()) {
-            throw RuntimeException("Shouldn't happen, ProgrammerNotFoundException.") //TODO remove removalInProgress after testing
-        }
         files.forEach {
             processFileCoroutineScope.launch {
-                index_(it)
+                doIndex(it)
             }
         }
     }
 
     private suspend fun processDeletedFiles(files: Set<Path>) {
-        try {
-            removalInProgress.set(true)
-            while (indexFilesJob.children.filter { !it.isCompleted }.count() > 0) {
-                //ideally wait on indexFilesJob.join() for only current children to complete instead
-                delay(READ_WRITE_HEARTBEAT)
-            }
-            log.debug("Mark $files for deletion")
-            reverseIndexStorage.remove(files)
-            //we could cache several deletions and bulk-modify the inverted index,
-            // but that also introduces additional concurrency between this cache and new additions to index
-            // this may be easier to solve using some sort of optimistic locking (when we store timestamps in the index
-            // and only apply if the change
-        } finally {
-            removalInProgress.set(false)
+        while (indexFilesJob.children.filter { !it.isCompleted }.count() > 0) {
+            //ideally wait on indexFilesJob.join() for only current children to complete instead
+            delay(READ_WRITE_HEARTBEAT)
         }
+        log.debug("Mark $files for deletion")
+        reverseIndexStorage.remove(files)
+        //we could cache several deletions and bulk-modify the inverted index,
+        // but that also introduces additional concurrency between this cache and new additions to index
+        // this may be easier to solve using some sort of optimistic locking (when we store timestamps in the index
+        // and only apply if the change
     }
 
 
-    private suspend fun index_(file: Path) {
+    private suspend fun doIndex(file: Path) {
         require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
         val fileSize = file.fileSize()
         if (tryToPreventOom && oomPossible(fileSize)) {
-            log.debug(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+            if (currentlyIndexingFiles.isNotEmpty()) {
+                log.debug(" ! Postpone indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                indexerServiceCoroutineScope.launch {
+                    delay(READ_WRITE_HEARTBEAT * 2)
+                    watchService.fileEventChannel.send(FSEvent(EventType.NEW, setOf(file)))
+                }
+            } else {
+                log.error(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                indexerErrorsChannel.trySend(IndexError(ErrorType.FILE_TOO_BIG, fileSize, file))
+            }
             return
         }
-        log.debug("Indexing Start ${file.pathString}  --->")
+        if (currentlyIndexingFiles.contains(file)) {
+            log.debug("Skip indexing $file as it is already indexing")
+            return
+        }
+        updateMetaForIndexStart(file)
+
         try {
             documentProcessor.extractWords(file)
-            log.debug("  ---> Indexing Done ${file.pathString}")
         } finally {
+            updateMetaForIndexDone(file)
             if (tryToPreventOom) {
                 currentlyIndexingFileSize.addAndGet(-fileSize)
             }
         }
     }
+
+    private fun updateMetaForIndexStart(file: Path) {
+        log.debug("Indexing Start ${file.pathString}  --->")
+        currentlyIndexingFiles[file] = true
+        filesWithBadWords[file] = 0
+    }
+
+
+    private fun updateMetaForIndexDone(file: Path) {
+        log.debug("  ---> Indexing Done ${file.pathString}")
+        if (filesWithBadWords[file] == 0L) {
+            filesWithBadWords.remove(file)
+        } else {
+            indexerErrorsChannel.trySend(IndexError(ErrorType.WORDS_SKIPPED, filesWithBadWords[file], file))
+        }
+        currentlyIndexingFiles.remove(file)
+    }
+
 
     private fun oomPossible(fileSize: Long): Boolean {
         val allIndexingFilesSize = currentlyIndexingFileSize.get()
@@ -176,6 +224,7 @@ class IndexerService internal constructor(
                     "Ignoring word <${word.substring(0, 10)}...> with length ${word.length} in file $filePath, " +
                             "current limit is $maxWordLength"
                 )
+                filesWithBadWords[filePath] = filesWithBadWords[filePath]!! + 1
             } else {
                 reverseIndexStorage.put(word, filePath)
             }
