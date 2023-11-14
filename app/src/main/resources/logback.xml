@@ -5,7 +5,13 @@
         </encoder>
     </appender>
 
+    <appender name="NOOP" class="ch.qos.logback.core.helpers.NOPAppender">
+        <encoder>
+            <pattern>%r [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <root level="debug">
-        <appender-ref ref="STDOUT" />
+        <appender-ref ref="NOOP" />
     </root>
 </configuration>

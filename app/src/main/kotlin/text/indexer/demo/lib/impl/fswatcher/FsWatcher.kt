@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
@@ -21,6 +22,7 @@ import kotlin.io.path.listDirectoryEntries
 class FsWatcher(val pollingIntervalMillis: Long = 2000L) : Closeable {
     val fileEventChannel = Channel<FSEvent>(Channel.BUFFERED)
 
+    private val shouldForcePoll = AtomicBoolean(false)
     private val watchRequestChannel = Channel<WatchRequest>(Channel.BUFFERED)
 
     private val log: Logger = LoggerFactory.getLogger(FsWatcher::class.java)
@@ -71,6 +73,7 @@ class FsWatcher(val pollingIntervalMillis: Long = 2000L) : Closeable {
                 RequestType.DELETE -> mutableWatchedFiles.remove(watchMsg.path) || mutableWatchedDirs.remove(watchMsg.path)
             }
         }
+        shouldForcePoll.set(true)
     }
 
 
@@ -123,7 +126,14 @@ class FsWatcher(val pollingIntervalMillis: Long = 2000L) : Closeable {
 
                 previouslyPolledFiles = currentFiles
 
-                delay(pollingIntervalMillis)
+                val start = System.currentTimeMillis()
+                while(System.currentTimeMillis() - start < pollingIntervalMillis) {
+                    if(shouldForcePoll.get()){
+                        shouldForcePoll.set(false)
+                        break
+                    }
+                    delay(100)
+                }
             }
             log.info("Terminating poller loop")
             fileEventChannel.close()

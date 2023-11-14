@@ -2,9 +2,10 @@
 Demo of a Kotlin library for text indexation
 See `text.indexer.demo.SimpleRun` for sample usage.
 Uses JDK17.
+Default logger configuration changed to NOOP, see [logback.xml]
 
 ## Running the CLI
-- `./gradlew run` to start the CLI
+- `./gradlew run --console=plain` to start the CLI
 
 
 
@@ -37,3 +38,4 @@ Uses JDK17.
 - Review Job / Dispatcher / CoContext structure - tested that current impl works and terminates, but maybe it's not the kotlin way
 - Handle potential exceptions in children contexts gracefully
 - Remove duplicated code from tests
+- Implement Channel based indexation status response (may require FSWatcher overhaul)

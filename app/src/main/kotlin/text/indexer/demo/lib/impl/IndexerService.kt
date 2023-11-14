@@ -33,7 +33,7 @@ import kotlin.io.path.pathString
 private val log: Logger = LoggerFactory.getLogger(IndexerService::class.java)
 
 private const val READ_WRITE_HEARTBEAT = 250L
-private const val FILE_MEMORY_PRINT_FACTOR = 1.2
+private const val FILE_MEMORY_PRINT_FACTOR = 1.5
 //^we could shift this memory factor based on previous indexation results in a certain range (e.g. [0.1 .. 1.2])
 // as indexed file memory usage depends on the types of text and tokenizers used, which we do not know beforehand.
 // For now as it's an edge case of an edge case, it's not a priority, just use safest value.

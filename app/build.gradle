@@ -28,6 +28,9 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-debug:$coroutines_version"
     implementation 'ch.qos.logback:logback-classic:1.4.5'
 
+    // cli
+    implementation "org.jetbrains.kotlinx:kotlinx-cli-jvm:0.3.6"
+
     // Use the Kotlin JUnit 5 integration.
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
     testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutines_version"
@@ -46,9 +49,15 @@ java {
     }
 }
 
+applicationDefaultJvmArgs = ["-Xmx4096m"]
+
 application {
     // Define the main class for the application.
-    mainClass = 'text.indexer.demo.MainApp'
+    mainClass = 'text.indexer.demo.cli.MainApp'
+}
+
+run{
+    standardInput = System.in
 }
 
 tasks.named('test') {
