@@ -1,9 +1,12 @@
 package text.indexer.demo.lib.impl.parser
 
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.coroutines.CoroutineContext
@@ -15,6 +18,7 @@ import kotlin.coroutines.CoroutineContext
  * if (tokenizer != null && customDelimiter != null) -> "Tokenizer that iterates on custom tokens")
  */
 private const val SEQUENCE_BULK_SIZE = 250
+private val log: Logger = LoggerFactory.getLogger(DocumentProcessor::class.java)
 
 class DocumentProcessor(
     coroutineContext: CoroutineContext,
@@ -22,7 +26,10 @@ class DocumentProcessor(
     private val wordCallback: (String, Path) -> Unit
 ) {
     private val defaultRegex = Regex("[\\p{Punct}\\s]+")
-    private val documentProcessorCoroutineScope = CoroutineScope(coroutineContext)
+    private val loggingExceptionHandler = CoroutineExceptionHandler { _, e ->
+        log.error("Exception in DocumentProcessor", e)
+    }
+    private val documentProcessorCoroutineScope = CoroutineScope(loggingExceptionHandler + coroutineContext)
 
     suspend fun extractWords(file: Path) {
         withContext(Dispatchers.IO) {

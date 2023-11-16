@@ -7,14 +7,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import text.indexer.demo.lib.impl.IndexerService
 import text.indexer.demo.lib.impl.util.mbSizeString
-import java.util.concurrent.atomic.AtomicBoolean
 
 class IndexerCliApplication {
     private val commandSplitRegex = Regex(" ")
     private val maxWordLength = 16384
-    private val indexerService = IndexerService(null, tryToPreventOom = true, maxWordLength = maxWordLength)
+    private val indexerService = IndexerService(null, tryToPreventOom = true, maxWordLength = maxWordLength, indexerThreadPoolSize = 10)
     private val cliCoroutineScope = CoroutineScope(Dispatchers.Default)
-    private val shouldNotify = AtomicBoolean(false)
     suspend fun start() {
         printHello()
 
@@ -37,15 +35,8 @@ class IndexerCliApplication {
         cliCoroutineScope.launch {
             //handle indexation state
             while (cliCoroutineScope.isActive) {
-                delay(250)
-                val inprogressFiles = indexerService.getInprogressFiles()
-                delay(250)
-                val inprogressFiles2 = indexerService.getInprogressFiles()
-
-                if (inprogressFiles == 0 && inprogressFiles2 == 0 && shouldNotify.get()) {
-                    shouldNotify.set(false)
-                    println("No more pending indexations. Indexed ${indexerService.getIndexedWordsCnt()} words.")
-                }
+                indexerService.lastFileIndexedChannel.receive()
+                println("No more pending indexations. Indexed ${indexerService.getIndexedWordsCnt()} words.")
             }
         }
 
@@ -55,12 +46,10 @@ class IndexerCliApplication {
     }
 
     private suspend fun index(argument: String) {
-        shouldNotify.set(true)
         indexerService.index(argument)
     }
 
     private suspend fun remove(argument: String) {
-        shouldNotify.set(true)
         indexerService.unindex(argument)
     }
 
@@ -84,7 +73,7 @@ class IndexerCliApplication {
                 "remove" -> remove(argument)
                 "search" -> search(argument)
                 else -> {
-                    println("Unknown command: $command")
+                    println("Unknown command: $command, use index/remove/search ")
                 }
             }
         } catch (e: Exception) {

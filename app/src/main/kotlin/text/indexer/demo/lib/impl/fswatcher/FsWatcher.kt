@@ -1,5 +1,6 @@
 package text.indexer.demo.lib.impl.fswatcher
 
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -33,8 +34,10 @@ class FsWatcher(val pollingIntervalMillis: Long = 2000L) : Closeable {
 
     // no concurrent access
     private val fileModificationTimestamps = HashMap<Path, Long>()
-
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val loggingExceptionHandler = CoroutineExceptionHandler { _, e ->
+        log.error("Exception in FsWatcher processes", e)
+    }
+    private val scope = CoroutineScope(loggingExceptionHandler + Dispatchers.Default)
 
 
     suspend fun watch(path: Path) {

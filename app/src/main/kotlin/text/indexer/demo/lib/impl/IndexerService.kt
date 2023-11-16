@@ -1,5 +1,6 @@
 package text.indexer.demo.lib.impl
 
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,7 +60,11 @@ class IndexerService internal constructor(
      * See [IndexError]
      */
     val indexerErrorsChannel = Channel<IndexError>(Channel.BUFFERED)
-    private val indexerServiceCoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val lastFileIndexedChannel = Channel<String>(Channel.BUFFERED)
+    private val loggingExceptionHandler = CoroutineExceptionHandler { _, e ->
+        log.error("Exception in IndexerService processes", e) // propagate this and childs exc into indexerErrorsChannel?
+    }
+    private val indexerServiceCoroutineScope = CoroutineScope(loggingExceptionHandler+SupervisorJob() + Dispatchers.Default)
     private val documentProcessor = DocumentProcessor(
         indexerServiceCoroutineScope.coroutineContext,
         tokenizer,
@@ -146,34 +151,42 @@ class IndexerService internal constructor(
 
 
     private suspend fun doIndex(file: Path) {
-        require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
-        val fileSize = file.fileSize()
-        if (tryToPreventOom && oomPossible(fileSize)) {
-            if (currentlyIndexingFiles.isNotEmpty()) {
-                log.debug(" ! Postpone indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
-                indexerServiceCoroutineScope.launch {
-                    delay(READ_WRITE_HEARTBEAT * 2)
-                    watchService.fileEventChannel.send(FSEvent(EventType.NEW, setOf(file)))
-                }
-            } else {
-                log.error(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
-                indexerErrorsChannel.trySend(IndexError(ErrorType.FILE_TOO_BIG, fileSize, file))
-            }
-            return
-        }
-        if (currentlyIndexingFiles.contains(file)) {
-            log.debug("Skip indexing $file as it is already indexing")
-            return
-        }
-        updateMetaForIndexStart(file)
-
         try {
-            documentProcessor.extractWords(file)
-        } finally {
-            updateMetaForIndexDone(file)
-            if (tryToPreventOom) {
-                currentlyIndexingFileSize.addAndGet(-fileSize)
+            require(!file.isDirectory()) { "Should specify file, but was directory: $file" }
+            val fileSize = file.fileSize()
+            if (tryToPreventOom && oomPossible(fileSize)) {
+                if (currentlyIndexingFiles.isNotEmpty()) {
+                    log.debug(" ! Postpone indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                    indexerServiceCoroutineScope.launch {
+                        delay(READ_WRITE_HEARTBEAT * 2)
+                        watchService.fileEventChannel.send(FSEvent(EventType.NEW, setOf(file)))
+                    }
+                } else {
+                    log.error(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                    indexerErrorsChannel.trySend(IndexError(ErrorType.FILE_TOO_BIG, fileSize.toString(), file))
+                }
+                return
             }
+            if (currentlyIndexingFiles.contains(file)) {
+                log.debug("Skip indexing $file as it is already indexing")
+                return
+            }
+            updateMetaForIndexStart(file)
+            try {
+                documentProcessor.extractWords(file)
+            } finally {
+                updateMetaForIndexDone(file)
+                if (tryToPreventOom) {
+                    currentlyIndexingFileSize.addAndGet(-fileSize)
+                }
+                if(getInprogressFiles() == 0) lastFileIndexedChannel.trySend("") // just for CLI, refactor
+            }
+        } catch (ex: java.nio.charset.CharacterCodingException) {
+            log.warn("Can index only UTF8 files, encountered another encoding/binary: $file")
+            indexerErrorsChannel.trySend(IndexError(ErrorType.NON_UTF8_FILE, null, file))
+        } catch (ex: Exception){
+            log.error("Unexpected Exception [$ex] while indexing: $file")
+            indexerErrorsChannel.trySend(IndexError(ErrorType.UNKNOWN_ERROR, ex.toString(), file))
         }
     }
 
@@ -189,7 +202,7 @@ class IndexerService internal constructor(
         if (filesWithBadWords[file] == 0L) {
             filesWithBadWords.remove(file)
         } else {
-            indexerErrorsChannel.trySend(IndexError(ErrorType.WORDS_SKIPPED, filesWithBadWords[file], file))
+            indexerErrorsChannel.trySend(IndexError(ErrorType.WORDS_SKIPPED, filesWithBadWords[file].toString(), file))
         }
         currentlyIndexingFiles.remove(file)
     }
