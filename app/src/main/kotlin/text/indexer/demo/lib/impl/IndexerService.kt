@@ -168,7 +168,7 @@ class IndexerService internal constructor(
             val fileSize = file.fileSize()
             if (tryToPreventOom && oomPossible(fileSize)) {
                 if (currentlyIndexingFiles.isNotEmpty()) {
-                    log.debug(" ! Postpone indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                    log.warn(" ! Postpone indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
                     indexerServiceCoroutineScope.launch {
                         delay(READ_WRITE_HEARTBEAT * 2)
                         watchService.fileEventChannel.send(FSEvent(EventType.NEW, setOf(file)))
@@ -191,7 +191,7 @@ class IndexerService internal constructor(
                 if (tryToPreventOom) {
                     currentlyIndexingFileSize.addAndGet(-fileSize)
                 }
-                if(getInprogressFiles() == 0) lastFileIndexedChannel.trySend("") // just for CLI, refactor
+                if (getInprogressFiles() == 0) lastFileIndexedChannel.trySend("") // just for CLI, refactor
             }
         } catch (ex: java.nio.charset.CharacterCodingException) {
             log.warn("Can index only UTF8 files, encountered another encoding/binary: $file")
@@ -227,7 +227,7 @@ class IndexerService internal constructor(
         if (allIndexingFilesSize + fileSize > (freeMemory / FILE_MEMORY_PRINT_FACTOR)) {
             Runtime.getRuntime().gc()
             if (allIndexingFilesSize + fileSize > (freeMemory / FILE_MEMORY_PRINT_FACTOR)) {
-                log.debug(
+                log.warn(
                     "Currently indexing ${allIndexingFilesSize.mbSizeString()}, with suggested file " +
                             "its ${(allIndexingFilesSize + fileSize).mbSizeString()} " +
                             "versus ${freeMemory.mbSizeString()} free heap after GC"

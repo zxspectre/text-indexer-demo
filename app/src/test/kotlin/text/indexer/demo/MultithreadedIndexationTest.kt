@@ -89,7 +89,7 @@ class MultithreadedIndexationTest {
                     throw innerExceptions.first()
                     // There should be a better way, use async?
                 }
-                assertEquals(repeatTimes + 241, indexerService.getIndexedWordsCnt())
+                assertEquals(repeatTimes + 242, indexerService.getIndexedWordsCnt())
                 assertEquals(repeatTimes, indexerService.search("This").size)
                 assertEquals(100 + repeatTimes, counter.get())
             } finally {

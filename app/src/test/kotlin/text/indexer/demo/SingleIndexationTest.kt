@@ -60,7 +60,7 @@ open class SingleIndexationTest {
             indexerService.use {
                 it.index("src/test/resources/testfiles")
                 waitForIndexationToFinish(it)
-                assertEquals(238, it.getIndexedWordsCnt(), "Total words indexed")
+                assertEquals(239, it.getIndexedWordsCnt(), "Total words indexed")
                 val OrwellFiles = it.search("Orwell")
                 assertEquals(1, OrwellFiles.size, "one file has Orwell in it")
                 assertEquals("src/test/resources/testfiles/small.rtf", OrwellFiles.first())
@@ -69,6 +69,26 @@ open class SingleIndexationTest {
                     it.getIndexedWordsCnt() == 0
                 }
                 assertEquals(0, it.search("Orwell").size)
+            }
+        }
+    }
+
+    @Test
+    fun indexParentDir() {
+        runBlocking {
+            val indexerService = IndexerServiceFactory.wordExtractingIndexerService()
+            indexerService.use {
+                it.index("src/test/resources/testfiles/inner")
+                waitForIndexationToFinish(it)
+                assertEquals(2, it.getIndexedWordsCnt(), "Total words indexed")
+                val files = it.search("Owen2")
+                assertEquals(1, files.size)
+
+                it.index("src/test/resources/testfiles")
+                waitForCondition(5000) {
+                    indexerService.getIndexedWordsCnt() > 2
+                }
+                assertEquals(239, it.getIndexedWordsCnt(), "Total words indexed")
             }
         }
     }

@@ -24,7 +24,7 @@ suspend fun main() {
             cs.launch { indexerService.index("app/src/main/resources") }
         }
         delay(500)
-        it.search("configuration")
+        println(it.search("configuration"))
 
 //        while (true) {
 //            delay(3000)
