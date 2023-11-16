@@ -2,7 +2,6 @@ package text.indexer.demo.lib.impl.storage
 
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.locks.ReentrantLock
 
 /**
  * Multimap based storage
@@ -14,7 +13,6 @@ import java.util.concurrent.locks.ReentrantLock
  * DEBUG DemoApp - Using 610MB, indexed 2148614 words - 44sec
  */
 class MapBasedStorage:ReverseIndexStorage<String, Path> {
-    private val addNewWordLock = ReentrantLock()
     private val wordToFileMap = ConcurrentHashMap<String, MutableCollection<Path>>()
 
     // Thread safe
@@ -40,13 +38,7 @@ class MapBasedStorage:ReverseIndexStorage<String, Path> {
 
     // Thread safe
     override fun put(keyword: String, document: Path) {
-        if(wordToFileMap[keyword] == null){
-            addNewWordLock.run {
-                if(wordToFileMap[keyword] == null){
-                    wordToFileMap[keyword] = ConcurrentHashMap.newKeySet()
-                }
-            }
-        }
-        wordToFileMap[keyword]!!.add(document)
+        wordToFileMap.computeIfAbsent(keyword) { _: String -> ConcurrentHashMap.newKeySet() }
+            .add(document)
     }
 }
