@@ -1,6 +1,9 @@
 package text.indexer.demo
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import text.indexer.demo.lib.IndexerServiceFactory
@@ -12,10 +15,14 @@ private val log: Logger = LoggerFactory.getLogger("DemoApp")
 class Main {}
 
 suspend fun main() {
+    val cs = CoroutineScope(Dispatchers.Default)
     log.info("Running with maxheap = ${Runtime.getRuntime().maxMemory().mbSizeString()}")
     val regex = Regex("[\\p{Punct}\\s]++")
     IndexerServiceFactory.lambdaTokenizerIndexerService { s: String -> s.splitToSequence(regex) }.use {
-        it.index("app/src/main/resources")
+        val indexerService = it
+        repeat(100) {
+            cs.launch { indexerService.index("app/src/main/resources") }
+        }
         delay(500)
         it.search("configuration")
 

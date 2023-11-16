@@ -54,7 +54,7 @@ class FsWatcher(val pollingIntervalMillis: Long = 2000L) : Closeable {
     }
 
 
-    init {
+    fun init() {
         processWatchRequestMessages()
         pollForFsChanges()
     }

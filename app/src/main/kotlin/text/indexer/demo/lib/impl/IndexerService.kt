@@ -24,6 +24,7 @@ import java.io.Closeable
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.Path
 import kotlin.io.path.fileSize
@@ -80,20 +81,8 @@ class IndexerService internal constructor(
 
     private val currentlyIndexingFileSize: AtomicLong = AtomicLong(0)
     private val currentlyIndexingFiles = ConcurrentHashMap<Path, Boolean>()
+    private val lazilyInitialized = AtomicBoolean(false)
 
-
-    init {
-        indexerServiceCoroutineScope.launch {
-            while (indexerServiceCoroutineScope.isActive) {
-                val event = watchService.fileEventChannel.receive()
-                log.trace("After FS Poll: received event with type: ${event.type}")
-                when (event.type) {
-                    EventType.NEW -> processNewFiles(event.files)
-                    EventType.DELETED -> processDeletedFiles(event.files)
-                }
-            }
-        }
-    }
 
     suspend fun index(path: String) {
         index(Path(path))
@@ -104,11 +93,34 @@ class IndexerService internal constructor(
     }
 
     suspend fun index(path: Path) {
+        lazyInit()
         if (path.notExists()) {
             log.error("Specified path `$path` does not exist, cannot index")
             throw IllegalArgumentException("Specified path `$path` does not exist, cannot index")
         }
         watchService.watch(path)
+    }
+
+    private fun lazyInit() {
+        if(!lazilyInitialized.get()){
+            synchronized(lazilyInitialized){
+                if(!lazilyInitialized.get()){
+                    log.debug("lazy init")
+                    indexerServiceCoroutineScope.launch {
+                        while (indexerServiceCoroutineScope.isActive) {
+                            val event = watchService.fileEventChannel.receive()
+                            log.trace("After FS Poll: received event with type: ${event.type}")
+                            when (event.type) {
+                                EventType.NEW -> processNewFiles(event.files)
+                                EventType.DELETED -> processDeletedFiles(event.files)
+                            }
+                        }
+                    }
+                    watchService.init()
+                    lazilyInitialized.set(true)
+                }
+            }
+        }
     }
 
     suspend fun unindex(path: Path) {

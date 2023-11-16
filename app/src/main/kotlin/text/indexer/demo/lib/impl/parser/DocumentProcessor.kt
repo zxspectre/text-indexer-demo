@@ -11,12 +11,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.coroutines.CoroutineContext
 
-/**
- * if (tokenizer == null && customDelimiter == null) -> "Standard word extractor"
- * if (tokenizer == null && customDelimiter != null) -> "Custom delimiter extractor"
- * if (tokenizer != null && customDelimiter == null) -> "Tokenizer that iterates on lines")
- * if (tokenizer != null && customDelimiter != null) -> "Tokenizer that iterates on custom tokens")
- */
 private const val SEQUENCE_BULK_SIZE = 250
 private val log: Logger = LoggerFactory.getLogger(DocumentProcessor::class.java)
 
