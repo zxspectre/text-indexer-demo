@@ -39,8 +39,7 @@ private const val FILE_MEMORY_PRINT_FACTOR = 1.5
 // For now as it's an edge case of an edge case, it's not a priority, just use safest value.
 /**
  * Indexer service.
- * See [text.indexer.demo.lib.IndexerServiceFactory] for examples
- * of creating this service in regards to `customDelimiter` and `tokenizer`
+ * See [text.indexer.demo.lib.IndexerServiceFactory].
  *
  * tryToPreventOom - will skip indexation if file size is too big for currently free memory and no files are indexed ATM
  *
@@ -50,7 +49,6 @@ private const val FILE_MEMORY_PRINT_FACTOR = 1.5
  * problems.
  */
 class IndexerService internal constructor(
-    customDelimiter: String?,
     tokenizer: ((String) -> Sequence<String>)?,
     indexerThreadPoolSize: Int = 2,
     private val tryToPreventOom: Boolean = true,
@@ -65,7 +63,6 @@ class IndexerService internal constructor(
     private val documentProcessor = DocumentProcessor(
         indexerServiceCoroutineScope.coroutineContext,
         tokenizer,
-        customDelimiter
     ) { word, doc -> processWordCallback(word, doc) }
 
     private val customDispatcher = Executors.newFixedThreadPool(indexerThreadPoolSize).asCoroutineDispatcher()

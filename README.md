@@ -7,6 +7,14 @@ Default logger configuration changed to NOOP, see [logback.xml]
 ## Running the CLI
 - `./gradlew run --console=plain` to start the CLI
 
+## Todo fixes
+- handle edge cases
+  - as in email
+  - check network URL indexations
+  - check other time of URIs
+  - cat /dev/null > enwik9 during indexation
+  - try to index binary files
+- ...
 
 
 ## Requirements

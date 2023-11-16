@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class IndexerCliApplication {
     private val commandSplitRegex = Regex(" ")
     private val maxWordLength = 16384
-    private val indexerService = IndexerService(null, null, tryToPreventOom = true, maxWordLength = maxWordLength)
+    private val indexerService = IndexerService(null, tryToPreventOom = true, maxWordLength = maxWordLength)
     private val cliCoroutineScope = CoroutineScope(Dispatchers.Default)
     private val shouldNotify = AtomicBoolean(false)
     suspend fun start() {
