@@ -173,11 +173,16 @@ class IndexerService internal constructor(
                         delay(READ_WRITE_HEARTBEAT * 2)
                         watchService.fileEventChannel.send(FSEvent(EventType.NEW, setOf(file)))
                     }
+                    return
                 } else {
-                    log.error(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
-                    indexerErrorsChannel.trySend(IndexError(ErrorType.FILE_TOO_BIG, fileSize.toString(), file))
+                    Runtime.getRuntime().gc()
+                    if(oomPossible(fileSize)) {
+                        log.error(" !!! Skip indexing file ${file.pathString} with size ${fileSize.mbSizeString()} as it may lead to OOM")
+                        indexerErrorsChannel.trySend(IndexError(ErrorType.FILE_TOO_BIG, fileSize.toString(), file))
+                        return
+                    }
                 }
-                return
+
             }
             if (currentlyIndexingFiles.contains(file)) {
                 log.debug("Skip indexing $file as it is already indexing")
@@ -225,7 +230,6 @@ class IndexerService internal constructor(
         val freeMemory =
             Runtime.getRuntime().maxMemory() - Runtime.getRuntime().totalMemory() + Runtime.getRuntime().freeMemory()
         if (allIndexingFilesSize + fileSize > (freeMemory / FILE_MEMORY_PRINT_FACTOR)) {
-            Runtime.getRuntime().gc()
             if (allIndexingFilesSize + fileSize > (freeMemory / FILE_MEMORY_PRINT_FACTOR)) {
                 log.warn(
                     "Currently indexing ${allIndexingFilesSize.mbSizeString()}, with suggested file " +
