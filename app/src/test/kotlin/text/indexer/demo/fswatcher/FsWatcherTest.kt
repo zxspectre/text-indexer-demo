@@ -59,6 +59,7 @@ class FsWatcherTest {
         runBlocking {
             val watchService = FsWatcher(300)
             try {
+                watchService.init()
                 // start polling two files and dir with 2 files
                 watchService.watch(Path("src/test/resources/testfiles/inner"))
                 watchService.watch(Path("src/test/resources/testfiles/ipsum.rtf"))
@@ -100,6 +101,7 @@ class FsWatcherTest {
             val newFile = Path("src/test/resources/testfiles/${tempDir}/newFile.txt")
             val newFile2 = Path("src/test/resources/testfiles/${tempDir}/inner/newFile2.txt")
             try {
+                watchService.init()
                 // create empty dir, watch it, no NEW events
                 Files.createDirectories(newFile.parent)  // replace by non blocking kotlin alt
                 watchService.watch(newFile.parent)
